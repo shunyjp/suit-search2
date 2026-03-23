@@ -97,6 +97,63 @@ def _check_jacket_size(attrs: MergedStructuredAttributes) -> tuple[list[str], li
     return blocking, notes
 
 
+def _check_material(attrs: MergedStructuredAttributes) -> tuple[list[str], list[str]]:
+    blocking: list[str] = []
+    notes: list[str] = []
+    mat = attrs.material
+
+    if not mat.outer_fibers:
+        notes.append(rsn.UNKNOWN_MATERIAL)
+        return blocking, notes
+
+    _NG_FIBERS = {"polyester", "polyurethane", "cotton"}
+    _NG_MSGS = {
+        "polyester": rsn.POLYESTER_NG,
+        "polyurethane": rsn.POLYURETHANE_NG,
+        "cotton": rsn.COTTON_NG,
+    }
+
+    for entry in mat.outer_fibers:
+        fiber = str(entry.get("fiber", ""))
+        if fiber in _NG_FIBERS:
+            blocking.append(_NG_MSGS[fiber])
+
+    return blocking, notes
+
+
+def _check_style(attrs: MergedStructuredAttributes) -> list[str]:
+    blocking: list[str] = []
+    sty = attrs.style
+
+    if sty.button_type == "double":
+        blocking.append(rsn.DOUBLE_BREASTED_NG)
+    if sty.button_count == 1:
+        blocking.append(rsn.ONE_BUTTON_NG)
+    if sty.button_color == "gold":
+        blocking.append(rsn.GOLD_BUTTON_NG)
+    if sty.button_color == "silver":
+        blocking.append(rsn.SILVER_BUTTON_NG)
+
+    return blocking
+
+
+def _check_condition(attrs: MergedStructuredAttributes) -> list[str]:
+    blocking: list[str] = []
+    cond = attrs.condition
+
+    if cond.has_stain is True:
+        # Only block on stain if grade is C or D, or explicitly severe
+        # For now treat any confirmed stain as requiring REVIEW (not blocking)
+        # True blocking is when description contains "ひどい汚れ" (caught in condition_parser warnings)
+        severe = any("ひどい" in w for w in cond.warnings)
+        if severe:
+            blocking.append(rsn.SEVERE_STAIN_NG)
+    if cond.has_hole is True:
+        blocking.append(rsn.HOLE_NG)
+
+    return blocking
+
+
 def _check_pants_size(attrs: MergedStructuredAttributes) -> tuple[list[str], list[str]]:
     blocking: list[str] = []
     notes: list[str] = []
@@ -165,10 +222,15 @@ def decide(attrs: MergedStructuredAttributes) -> DecisionOutput:
     all_blocking.extend(b)
     all_notes.extend(n)
 
-    # material / style / condition checks – Phase 4
-    # all_blocking.extend(_check_material(attrs))
-    # all_blocking.extend(_check_style(attrs))
-    # all_blocking.extend(_check_condition(attrs))
+    b, n = _check_material(attrs)
+    all_blocking.extend(b)
+    all_notes.extend(n)
+
+    b = _check_style(attrs)
+    all_blocking.extend(b)
+
+    b = _check_condition(attrs)
+    all_blocking.extend(b)
 
     # Determine unknown count – if many unknowns → REVIEW
     unknown_count = (

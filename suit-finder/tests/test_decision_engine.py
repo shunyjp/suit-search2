@@ -145,3 +145,130 @@ class TestDecisionEngineReview:
         attrs.size.unknown_fields = ["a", "b", "c", "d", "e", "f"]
         out = decide(attrs)
         assert out.verdict in ("REVIEW", "MATCH")  # depends on score
+
+
+class TestDecisionEngineMaterial:
+    def test_polyester_outer_ng(self):
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(
+            outer_fibers=[{"fiber": "polyester", "percentage": 100}]
+        )
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("polyester" in r for r in out.blocking_reasons)
+
+    def test_polyurethane_outer_ng(self):
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(
+            outer_fibers=[{"fiber": "polyurethane", "percentage": 5}]
+        )
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+
+    def test_cotton_outer_ng(self):
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(
+            outer_fibers=[{"fiber": "cotton", "percentage": 100}]
+        )
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+
+    def test_wool_100_ok(self):
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(
+            outer_fibers=[{"fiber": "wool", "percentage": 100}]
+        )
+        out = decide(attrs)
+        # wool is not NG
+        assert not any("polyester" in r or "cotton" in r for r in out.blocking_reasons)
+
+    def test_lining_polyester_not_ng(self):
+        """Polyester in lining is not NG – only outer matters."""
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(
+            outer_fibers=[{"fiber": "wool", "percentage": 100}],
+            lining_fibers=[{"fiber": "polyester", "percentage": 100}],
+        )
+        out = decide(attrs)
+        assert not any("polyester" in r for r in out.blocking_reasons)
+
+    def test_unknown_material_note_not_blocking(self):
+        """Unknown material raises note but is not a blocking reason."""
+        attrs = _good_attrs()
+        attrs.material = MaterialParserOutput(outer_fibers=[])
+        out = decide(attrs)
+        # Should be REVIEW or MATCH, not NO_MATCH due to unknown material alone
+        blocking_mat = [r for r in out.blocking_reasons if "polyester" in r or "cotton" in r]
+        assert len(blocking_mat) == 0
+
+
+class TestDecisionEngineStyle:
+    def test_double_breasted_ng(self):
+        attrs = _good_attrs()
+        attrs.style = StyleParserOutput(button_type="double")
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("ダブル" in r for r in out.blocking_reasons)
+
+    def test_one_button_ng(self):
+        attrs = _good_attrs()
+        attrs.style = StyleParserOutput(button_count=1)
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("1ボタン" in r for r in out.blocking_reasons)
+
+    def test_gold_button_ng(self):
+        attrs = _good_attrs()
+        attrs.style = StyleParserOutput(button_color="gold")
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("金ボタン" in r for r in out.blocking_reasons)
+
+    def test_silver_button_ng(self):
+        attrs = _good_attrs()
+        attrs.style = StyleParserOutput(button_color="silver")
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+
+    def test_single_2button_black_ok(self):
+        attrs = _good_attrs()
+        attrs.style = StyleParserOutput(button_type="single", button_count=2, button_color="black")
+        out = decide(attrs)
+        assert not any("ダブル" in r or "1ボタン" in r or "金ボタン" in r
+                       for r in out.blocking_reasons)
+
+
+class TestDecisionEngineCondition:
+    def test_severe_stain_ng(self):
+        attrs = _good_attrs()
+        attrs.condition = ConditionParserOutput(
+            has_stain=True,
+            warnings=["ひどい汚れの記述あり"],
+        )
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("汚れ" in r for r in out.blocking_reasons)
+
+    def test_hole_ng(self):
+        attrs = _good_attrs()
+        attrs.condition = ConditionParserOutput(has_hole=True)
+        out = decide(attrs)
+        assert out.verdict == "NO_MATCH"
+        assert any("穴" in r for r in out.blocking_reasons)
+
+    def test_normal_stain_not_blocking(self):
+        """Minor stain (no severe warning) should not block."""
+        attrs = _good_attrs()
+        attrs.condition = ConditionParserOutput(
+            has_stain=True,
+            warnings=["汚れの記述あり"],  # no "ひどい"
+        )
+        out = decide(attrs)
+        # Not a blocking reason (only noted)
+        assert not any("汚れ" in r for r in out.blocking_reasons)
+
+    def test_no_stain_no_hole_ok(self):
+        attrs = _good_attrs()
+        attrs.condition = ConditionParserOutput(grade="A", has_stain=False, has_hole=False)
+        out = decide(attrs)
+        assert not any("穴" in r or "汚れ" in r for r in out.blocking_reasons)

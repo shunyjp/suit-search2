@@ -156,7 +156,11 @@ class StatusParserOutput(BaseModel):
 
 
 class MaterialParserOutput(BaseModel):
-    """Stub – Phase 4 implementation."""
+    """Fiber content for outer and lining fabrics.
+
+    Each entry in outer_fibers / lining_fibers:
+        {"fiber": str, "percentage": int | None}
+    """
 
     outer_fibers: list[dict[str, Any]] = Field(default_factory=list)
     lining_fibers: list[dict[str, Any]] = Field(default_factory=list)
@@ -166,20 +170,20 @@ class MaterialParserOutput(BaseModel):
 
 
 class StyleParserOutput(BaseModel):
-    """Stub – Phase 4 implementation."""
+    """Jacket style features: breasted type, button count/color."""
 
     button_type: Optional[str] = None   # "single" | "double"
     button_count: Optional[int] = None
-    button_color: Optional[str] = None
+    button_color: Optional[str] = None  # "gold" | "silver" | "black" | ...
     unknown_fields: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     confidence: float = 0.0
 
 
 class ConditionParserOutput(BaseModel):
-    """Stub – Phase 4 implementation."""
+    """Item condition: grade, stain, hole."""
 
-    grade: Optional[str] = None
+    grade: Optional[str] = None         # "S" | "A" | "B" | "C" | "D"
     has_stain: Optional[bool] = None
     has_hole: Optional[bool] = None
     unknown_fields: list[str] = Field(default_factory=list)

@@ -33,3 +33,25 @@ def inseam_ng(value: float) -> str:
 def inseam_short(value: float, minimum: float, double_hem: bool) -> str:
     hem_note = " (裾ダブル許容)" if double_hem else ""
     return f"股下 {value}cm が最低値 {minimum}cm を下回っています{hem_note}"
+
+
+# Material
+def ng_material(fiber: str, pct: int | None) -> str:
+    pct_str = f" {pct}%" if pct is not None else ""
+    return f"NG素材: {fiber}{pct_str} が含まれています"
+
+
+POLYESTER_NG = "NG素材: polyester (表地ポリエステルはNG)"
+POLYURETHANE_NG = "NG素材: polyurethane (ポリウレタンはNG)"
+COTTON_NG = "NG素材: cotton (コットンはNG)"
+UNKNOWN_MATERIAL = "素材不明 (要レビュー)"
+
+# Style
+DOUBLE_BREASTED_NG = "NG: ダブルブレスト"
+ONE_BUTTON_NG = "NG: 1ボタンジャケット"
+GOLD_BUTTON_NG = "NG: 金ボタン"
+SILVER_BUTTON_NG = "NG: 銀ボタン"
+
+# Condition
+SEVERE_STAIN_NG = "NG: ひどい汚れあり"
+HOLE_NG = "NG: 穴・破れあり"
