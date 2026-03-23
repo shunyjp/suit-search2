@@ -1,0 +1,31 @@
+# Site-specific connector configuration
+
+yahoo_auctions:
+  base_url: "https://auctions.yahoo.co.jp"
+  item_url_pattern: "https://page.auctions.yahoo.co.jp/jp/auction/{item_id}"
+  search_url: "https://auctions.yahoo.co.jp/search/search"
+  category_mens_suits: "2084228408"
+  wait_ms: 2000
+  headless: true
+  selectors:
+    title_text: "h1.ProductTitle__text"
+    price_text: ".Price__value"
+    status_text: ".AuctionStatus"
+    description_text: ".ItemDescription"
+    specs_text: ".ProductDetail__section"
+    brand_text: ".Breadcrumb__link"
+    category_text: ".Breadcrumb"
+    image_urls: ".ProductImage__image"
+
+# Future sites (not yet implemented)
+yahoo_flea:
+  enabled: false
+
+mercari:
+  enabled: false
+
+trefac:
+  enabled: false
+
+rakuma:
+  enabled: false

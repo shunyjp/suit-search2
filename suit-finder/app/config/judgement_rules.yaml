@@ -1,0 +1,62 @@
+# ユーザー定義購入判定条件
+# decision_engine.py で参照（Phase 4でYAML直接読み込みに移行予定）
+
+price:
+  max_jpy: 30000
+  auction_requires_buy_now: true
+
+jacket:
+  shoulder_cm:
+    min: 43
+    max: 45
+    required: true
+  chest_width_cm:
+    min: 51
+    max: 53
+    required: true
+  length_cm:
+    reference: 72
+    required: false
+  sleeve_cm:
+    min: 60
+    max: 64
+    ng_below: 59
+    required: true
+
+pants:
+  waist_flat_cm:
+    min: 42
+    max: 45
+  waist_circumference_cm:
+    min: 84
+    max: 90
+  rise_cm:
+    reference: 26
+    note: "25cm以下かつウエスト43cm未満はNG"
+  inseam_cm:
+    min: 74
+    min_with_double_hem: 71
+    ng_below: 70
+    required: true
+  hem_width_cm:
+    ng_below: 18
+  thigh_cm:
+    ng_below: 29
+  total_length_cm:
+    reference: 100
+
+material:
+  outer:
+    ng: [polyester, polyurethane, cotton]
+    prefer: [mohair]
+    top_priority: "mohair60_wool40"
+
+style:
+  jacket:
+    ng_types: [double, single_button, gold_button, silver_button]
+
+condition:
+  ng: [severe_stain, hole]
+
+status:
+  required: active

@@ -1,0 +1,65 @@
+{
+  "item_id": "yahoo_auc_sample_001",
+  "size": {
+    "jacket": {
+      "shoulder_cm": {"value": 44.0, "unit": "cm", "confidence": 0.765, "evidence": "肩幅：44cm", "source": "description"},
+      "chest_width_cm": {"value": 52.0, "unit": "cm", "confidence": 0.765, "evidence": "身幅：52cm", "source": "description"},
+      "length_cm": {"value": 73.0, "unit": "cm", "confidence": 0.765, "evidence": "着丈：73cm", "source": "description"},
+      "sleeve_cm": {"value": 62.0, "unit": "cm", "confidence": 0.765, "evidence": "袖丈：62cm", "source": "description"}
+    },
+    "pants": {
+      "waist_flat_cm": {"value": 43.0, "unit": "cm", "confidence": 0.765, "evidence": "ウエスト平置き：43cm", "source": "description"},
+      "waist_circumference_cm": null,
+      "rise_cm": {"value": 26.0, "unit": "cm", "confidence": 0.765, "evidence": "股上：26cm", "source": "description"},
+      "inseam_cm": {"value": 76.0, "unit": "cm", "confidence": 0.765, "evidence": "股下：76cm", "source": "description"},
+      "hem_width_cm": {"value": 19.0, "unit": "cm", "confidence": 0.765, "evidence": "裾幅：19cm", "source": "description"},
+      "thigh_cm": {"value": 30.0, "unit": "cm", "confidence": 0.765, "evidence": "ワタリ：30cm", "source": "description"},
+      "total_length_cm": null,
+      "hem_finish": {"value": "double", "confidence": 0.765, "evidence": "裾ダブル", "source": "description"}
+    },
+    "unknown_fields": ["pants_total_length_cm"],
+    "warnings": [],
+    "confidence": 1.0
+  },
+  "price": {
+    "listing_type": "auction",
+    "current_price_jpy": 8500,
+    "buy_now_price_jpy": 15000,
+    "shipping_price_jpy": null,
+    "shipping_included": null,
+    "evidence": ["現在価格: 8500円", "即決: 15000円"],
+    "unknown_fields": ["shipping_price_jpy"],
+    "warnings": [],
+    "confidence": 0.9
+  },
+  "status": {
+    "normalized_status": "active",
+    "raw_status": "出品中",
+    "evidence": "出品中",
+    "confidence": 0.9,
+    "warnings": []
+  },
+  "material": {
+    "outer_fibers": [],
+    "lining_fibers": [],
+    "unknown_fields": ["outer_fibers", "lining_fibers"],
+    "warnings": ["material_parser は未実装 (Phase 4)"],
+    "confidence": 0.0
+  },
+  "style": {
+    "button_type": null,
+    "button_count": null,
+    "button_color": null,
+    "unknown_fields": ["button_type", "button_count", "button_color"],
+    "warnings": ["style_parser は未実装 (Phase 4)"],
+    "confidence": 0.0
+  },
+  "condition": {
+    "grade": null,
+    "has_stain": null,
+    "has_hole": null,
+    "unknown_fields": ["grade", "has_stain", "has_hole"],
+    "warnings": ["condition_parser は未実装 (Phase 4)"],
+    "confidence": 0.0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "listing_type": "auction",
+  "current_price_jpy": 8500,
+  "buy_now_price_jpy": 15000,
+  "shipping_price_jpy": null,
+  "shipping_included": null,
+  "evidence": ["現在価格: 8500円", "即決: 15000円"],
+  "unknown_fields": ["shipping_price_jpy"],
+  "warnings": [],
+  "confidence": 0.9
+}

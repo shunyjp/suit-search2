@@ -1,0 +1,80 @@
+{
+  "jacket": {
+    "shoulder_cm": {
+      "value": 44.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "肩幅：44cm",
+      "source": "description"
+    },
+    "chest_width_cm": {
+      "value": 52.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "身幅：52cm",
+      "source": "description"
+    },
+    "length_cm": {
+      "value": 73.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "着丈：73cm",
+      "source": "description"
+    },
+    "sleeve_cm": {
+      "value": 62.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "袖丈：62cm",
+      "source": "description"
+    }
+  },
+  "pants": {
+    "waist_flat_cm": {
+      "value": 43.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "ウエスト平置き：43cm",
+      "source": "description"
+    },
+    "waist_circumference_cm": null,
+    "rise_cm": {
+      "value": 26.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "股上：26cm",
+      "source": "description"
+    },
+    "inseam_cm": {
+      "value": 76.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "股下：76cm",
+      "source": "description"
+    },
+    "hem_width_cm": {
+      "value": 19.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "裾幅：19cm",
+      "source": "description"
+    },
+    "thigh_cm": {
+      "value": 30.0,
+      "unit": "cm",
+      "confidence": 0.765,
+      "evidence": "ワタリ：30cm",
+      "source": "description"
+    },
+    "total_length_cm": null,
+    "hem_finish": {
+      "value": "double",
+      "confidence": 0.765,
+      "evidence": "裾ダブル",
+      "source": "description"
+    }
+  },
+  "unknown_fields": ["pants_total_length_cm"],
+  "warnings": [],
+  "confidence": 1.0
+}

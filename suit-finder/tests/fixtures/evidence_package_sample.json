@@ -1,0 +1,79 @@
+{
+  "item_id": "yahoo_auc_sample_001",
+  "url": "https://page.auctions.yahoo.co.jp/jp/auction/sample001",
+  "source_site": "yahoo_auctions",
+  "retrieved_at": "2024-06-01T10:00:00Z",
+  "page_signals": {
+    "url": "https://page.auctions.yahoo.co.jp/jp/auction/sample001",
+    "title_text": "【美品】ブリオーニ メンズ スーツ セットアップ ウール100% 黒 サイズ46",
+    "price_text": "現在 8,500円\n即決 15,000円",
+    "status_text": "出品中",
+    "description_text": "ブリオーニのスーツです。\n【サイズ】\n肩幅：44cm\n身幅：52cm\n着丈：73cm\n袖丈：62cm\n\n【パンツ】\nウエスト平置き：43cm\n股上：26cm\n股下：76cm\n裾幅：19cm\nワタリ：30cm\n裾ダブル\n\n【素材】\n表地：ウール100%\n裏地：ポリエステル100%\n\n【状態】\n数回着用のみの美品です。汚れ・穴などなし。",
+    "all_text": "【美品】ブリオーニ メンズ スーツ セットアップ ウール100% 黒 サイズ46\n現在 8,500円 即決 15,000円\n出品中\n肩幅：44cm 身幅：52cm 着丈：73cm 袖丈：62cm ウエスト平置き：43cm 股上：26cm 股下：76cm 裾幅：19cm ワタリ：30cm 裾ダブル",
+    "specs_text": "",
+    "brand_text": "ブリオーニ",
+    "category_text": "メンズ > スーツ > セットアップ",
+    "image_urls": [
+      "https://auctions.afimg.jp/item/sample001/image/01.jpg"
+    ],
+    "retrieved_at": "2024-06-01T10:00:00Z"
+  },
+  "evidence_blocks": [
+    {
+      "source": "title",
+      "text": "【美品】ブリオーニ メンズ スーツ セットアップ ウール100% 黒 サイズ46",
+      "block_type": "title",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source": "price",
+      "text": "現在 8,500円 即決 15,000円",
+      "block_type": "price",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source": "status",
+      "text": "出品中",
+      "block_type": "status",
+      "confidence": 1.0,
+      "metadata": {}
+    },
+    {
+      "source": "description",
+      "text": "ブリオーニのスーツです。",
+      "block_type": "description",
+      "confidence": 0.85,
+      "metadata": {}
+    },
+    {
+      "source": "description",
+      "text": "【サイズ】 肩幅：44cm 身幅：52cm 着丈：73cm 袖丈：62cm",
+      "block_type": "description",
+      "confidence": 0.85,
+      "metadata": {}
+    },
+    {
+      "source": "description",
+      "text": "【パンツ】 ウエスト平置き：43cm 股上：26cm 股下：76cm 裾幅：19cm ワタリ：30cm 裾ダブル",
+      "block_type": "description",
+      "confidence": 0.85,
+      "metadata": {}
+    },
+    {
+      "source": "description",
+      "text": "【素材】 表地：ウール100% 裏地：ポリエステル100%",
+      "block_type": "description",
+      "confidence": 0.85,
+      "metadata": {}
+    },
+    {
+      "source": "description",
+      "text": "【状態】 数回着用のみの美品です。汚れ・穴などなし。",
+      "block_type": "description",
+      "confidence": 0.85,
+      "metadata": {}
+    }
+  ]
+}

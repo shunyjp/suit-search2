@@ -1,0 +1,10 @@
+{
+  "item_id": "yahoo_auc_sample_001",
+  "verdict": "MATCH",
+  "score": 0.85,
+  "reasons": [],
+  "blocking_reasons": [],
+  "needs_llm_review": false,
+  "needs_human_review": false,
+  "confidence": 0.85
+}

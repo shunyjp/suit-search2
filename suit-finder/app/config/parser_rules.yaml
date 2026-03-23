@@ -1,0 +1,38 @@
+# Parser configuration
+
+size_parser:
+  # Evidence source priority (earlier = higher priority)
+  source_priority: [specs, description, title, brand, category, all_text]
+  # Plausibility bounds (cm)
+  bounds:
+    jacket_shoulder_cm: [36, 55]
+    jacket_chest_width_cm: [44, 70]
+    jacket_length_cm: [60, 90]
+    jacket_sleeve_cm: [50, 75]
+    pants_waist_flat_cm: [30, 60]
+    pants_waist_circ_cm: [60, 120]
+    pants_rise_cm: [20, 40]
+    pants_inseam_cm: [55, 95]
+    pants_hem_width_cm: [14, 30]
+    pants_thigh_cm: [22, 45]
+    pants_total_length_cm: [85, 130]
+  # Waist disambiguation: values <= this are treated as flat measurement
+  waist_flat_threshold_cm: 60
+
+price_parser:
+  source_priority: [price, specs, description, all_text]
+
+status_parser:
+  source_priority: [status, title, description, all_text]
+
+confidence:
+  # Confidence multiplier per source
+  source_weights:
+    specs: 1.0
+    description: 0.85
+    title: 0.9
+    price: 1.0
+    status: 1.0
+    brand: 0.95
+    category: 0.8
+    all_text: 0.6
