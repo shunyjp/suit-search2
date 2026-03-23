@@ -25,12 +25,13 @@ from app.normalizers.text import normalize_japanese_text
 # ---------------------------------------------------------------------------
 
 # Single / Double breasted
+# NOTE: negative lookbehind (?<!裾) prevents matching "裾ダブル" (double hem finish)
 _DOUBLE = re.compile(
-    r"ダブル(?:ブレスト|スーツ|ジャケット)?|double\s*(?:breasted)?|[Ww]ブレスト",
+    r"(?<!裾)ダブル(?:ブレスト|スーツ|ジャケット)?|double\s*breasted|[Ww]ブレスト",
     re.IGNORECASE,
 )
 _SINGLE = re.compile(
-    r"シングル(?:ブレスト|スーツ|ジャケット)?|single\s*(?:breasted)?|[Ss]ブレスト",
+    r"シングル(?:ブレスト|スーツ|ジャケット)?|single\s*breasted|[Ss]ブレスト",
     re.IGNORECASE,
 )
 

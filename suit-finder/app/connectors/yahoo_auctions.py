@@ -104,6 +104,27 @@ _BUY_NOW_INLINE = re.compile(r"即決[：:\s]*([0-9,]+)\s*円")
 _CURRENT_INLINE = re.compile(r"現在[：:\s]*([0-9,]+)\s*円")
 
 
+# Item URL patterns on Yahoo Auctions search results
+_ITEM_URL_RE = re.compile(
+    r"https?://page\.auctions\.yahoo\.co\.jp/jp/auction/[a-zA-Z0-9]+"
+)
+_ITEM_ID_RE = re.compile(r"/auction/([a-zA-Z0-9]+)")
+
+
+def _extract_item_urls(text: str) -> list[str]:
+    """Extract unique item URLs from page text / HTML."""
+    urls = _ITEM_URL_RE.findall(text)
+    seen: set[str] = set()
+    result: list[str] = []
+    for url in urls:
+        # Normalise: strip query params
+        base = url.split("?")[0]
+        if base not in seen:
+            seen.add(base)
+            result.append(base)
+    return result
+
+
 def _postprocess(raw: dict) -> dict:
     """Apply site-specific fixes to the raw fetch result.
 
@@ -145,13 +166,29 @@ class YahooAuctionsConnector(BaseConnector):
         max_price: int = 30_000,
         page: int = 1,
     ) -> list[str]:
-        """Return a list of item URLs from a search results page.
+        """Fetch search results page and return individual item URLs.
 
-        NOTE: Actual scraping of the search result page is Phase 2+.
-        Currently returns the search URL itself for manual inspection.
+        Extracts anchor hrefs matching the Yahoo Auctions item URL pattern.
+        Returns empty list on failure (non-blocking).
         """
+        from app.fetchers.rendered_fetcher import fetch_rendered  # lazy
+
         search_url = build_search_url(query, max_price=max_price, page=page)
-        logger.info("Search URL: %s", search_url)
-        # Phase 2: parse result links from the rendered search page
-        # For now, return the search URL as a placeholder
-        return [search_url]
+        logger.info("Searching: %s", search_url)
+
+        try:
+            raw = await fetch_rendered(
+                url=search_url,
+                headless=self.headless,
+                wait_ms=self.wait_ms,
+                selectors={},  # only need all_text for link extraction
+            )
+        except Exception as exc:
+            logger.warning("Search fetch failed: %s", exc)
+            return []
+
+        # Extract item URLs from all_text via regex
+        all_text = raw.get("all_text", "")
+        item_urls = _extract_item_urls(all_text)
+        logger.info("Found %d item URLs", len(item_urls))
+        return item_urls
