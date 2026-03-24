@@ -17,6 +17,8 @@ import logging
 import re
 from urllib.parse import urlencode
 
+from bs4 import BeautifulSoup
+
 from app.connectors.base import BaseConnector, PageSignals
 
 logger = logging.getLogger(__name__)
@@ -124,6 +126,26 @@ def _extract_item_urls(text: str) -> list[str]:
         if base not in seen:
             seen.add(base)
             result.append(base)
+    return result
+
+
+def _extract_item_urls_from_html(html: str) -> list[str]:
+    """Extract unique Yahoo Auctions item URLs from raw HTML.
+
+    Uses BeautifulSoup to find all <a href="..."> elements and filters
+    for Yahoo Auctions item URL pattern.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    _ITEM_URL_PATTERN = "page.auctions.yahoo.co.jp/jp/auction/"
+    seen: set[str] = set()
+    result: list[str] = []
+    for tag in soup.find_all("a", href=True):
+        href: str = tag["href"]
+        if _ITEM_URL_PATTERN in href:
+            base = href.split("?")[0]
+            if base not in seen:
+                seen.add(base)
+                result.append(base)
     return result
 
 
