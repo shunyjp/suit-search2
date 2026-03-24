@@ -25,6 +25,7 @@ from app.parsers.price_parser import parse_price
 from app.parsers.size_parser import parse_size
 from app.parsers.status_parser import parse_status
 from app.parsers.style_parser import parse_style
+from app.llm.supplement import maybe_supplement
 from app.rules.decision_engine import decide
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,9 @@ async def run_crawl_job(url: str, headless: bool = True) -> CrawlResult:
         material = parse_material(parser_input)
         style = parse_style(parser_input)
         condition = parse_condition(parser_input)
+
+        # LLM supplement: fill unknown fields if GEMINI_API_KEY is set
+        size, material = await maybe_supplement(parser_input, size, material)
 
         merged = merge_attributes(
             item_id=package.item_id,
