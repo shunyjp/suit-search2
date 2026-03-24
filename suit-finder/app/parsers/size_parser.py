@@ -40,7 +40,9 @@ from app.normalizers.units import parse_cm
 
 _NUM = r"(\d{1,3}(?:\.\d{1,2})?)"      # capture group: the numeric value
 _UNIT = r"(?:cm|CM|㎝|センチ)?"         # optional unit
-_SEP = r"[\s：:・/＝=約]*"             # label–value separator (約 = approx.)
+# label–value separator: optional punctuation/約, optional modifier (直線で)/etc
+# Note: normalize_japanese_text() converts full-width （）→ half-width ()
+_SEP = r"[\s：:・/＝=約]*(?:\([^)]{1,6}\))?[\s：:・/＝=約]*"
 
 
 def _pat(*labels: str) -> re.Pattern[str]:
@@ -67,7 +69,7 @@ PAT_SLEEVE = _pat("袖丈", "袖 丈", "スリーブ")
 
 PAT_WAIST_FLAT = _pat("ウエスト平置き", "ウェスト平置き", "腰幅", "ウエスト（平置き）",
                        "ウェスト（平置き）", "W平置き", "ウエスト 平置き",
-                       "ウェスト 平置き")
+                       "ウェスト 平置き", "ウエスト実寸", "ウェスト実寸")
 PAT_WAIST_CIRC = _pat("ウエスト周り", "ウェスト周り", "ウエストぐるり", "ウェストぐるり",
                        "ウエスト（ぐるり）", "W周囲")
 # Plain ウエスト – ambiguous (flat vs. circumference)
@@ -75,7 +77,7 @@ PAT_WAIST_PLAIN = _pat("ウエスト", "ウェスト", "W")
 PAT_RISE = _pat("股上", "ライズ")
 PAT_INSEAM = _pat("股下", "インシーム")
 PAT_HEM_WIDTH = _pat("裾幅", "裾 幅", "裾巾")
-PAT_THIGH = _pat("ワタリ", "渡り", "もも幅", "腿幅")
+PAT_THIGH = _pat("ワタリ", "渡り", "渡り幅", "もも幅", "腿幅")
 PAT_TOTAL_LEN = _pat("総丈", "全丈", "パンツ丈")
 
 # Hem finish – categorical
