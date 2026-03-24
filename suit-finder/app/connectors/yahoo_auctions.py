@@ -29,17 +29,19 @@ logger = logging.getLogger(__name__)
 SELECTORS: dict[str, str] = {
     # Title
     "title_text": "h1.ProductTitle__text",
-    # Current bid / price
-    "price_text": ".Price__value",
+    # Full price area – captures current bid AND buy-now price in one text bucket
+    # (using .Price__value only gets the first match; .Price captures both)
+    "price_text": ".Price",
     # Status area (contains remaining time, bid count, sold/active label)
     "status_text": ".AuctionStatus",
     # Item description / seller comment
     "description_text": ".ItemDescription",
     # Spec table (size/material sometimes appear here as free text)
     "specs_text": ".ProductDetail__section",
-    # Brand
-    "brand_text": ".Breadcrumb__link",
-    # Category breadcrumb
+    # Brand – last Breadcrumb__link is usually the brand/item category
+    # We'll capture the full Breadcrumb and parse brand from it
+    "brand_text": ".Breadcrumb",
+    # Category breadcrumb (same element – used as category context)
     "category_text": ".Breadcrumb",
     # Product images
     "image_urls": ".ProductImage__image",

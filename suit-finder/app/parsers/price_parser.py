@@ -109,6 +109,27 @@ def parse_price(parser_input: ParserInput) -> PriceParserOutput:
     current = _first_match_jpy(_CURRENT_PRICE, full_text)
     if current is None:
         current = _first_match_jpy(_WINNING_PRICE, full_text)
+
+    # Fallback: if no keyword match, treat the first numeric price in the
+    # 'price' evidence block as the current price.  We strip out any price
+    # that immediately follows 即決/即決価格 to avoid treating buy-now as
+    # the current bid. Yahoo Auctions may render the current bid without
+    # the "現在" prefix.
+    if current is None:
+        price_blocks = [b for b in ordered if b.source == "price"]
+        for pb in price_blocks:
+            text = _clean(pb.text)
+            # Remove the buy_now amount from the text before generic matching
+            text_no_buynow = re.sub(
+                r"即決\s*(?:価格)?\s*[：:\s]*[0-9,，]+\s*円", "", text
+            )
+            m = _GENERIC_PRICE.search(text_no_buynow)
+            if m:
+                candidate = parse_jpy(m.group(1))
+                if candidate and candidate > 0:
+                    current = candidate
+                    break
+
     output.current_price_jpy = current
     if current is not None:
         evidence_texts.append(f"現在価格: {current}円")
