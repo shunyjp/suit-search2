@@ -11,9 +11,14 @@ Example:
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import sys
 from pathlib import Path
+
+# Ensure UTF-8 output on Windows (avoids garbled Japanese text)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # Ensure project root is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))

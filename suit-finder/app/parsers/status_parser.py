@@ -23,8 +23,8 @@ _SOLD_PATTERNS = [
 ]
 
 _ENDED_PATTERNS = [
-    # 「終了します」(will end) は active なので除外。「終了しました」「終了済み」「終了」単独はNG
-    re.compile(r"終了(?!します)", re.IGNORECASE),
+    # 「終了します」「終了予定」「終了日時」は active なので除外
+    re.compile(r"終了(?!します|予定|日時)", re.IGNORECASE),
     re.compile(r"オークション終了", re.IGNORECASE),
     re.compile(r"期限切れ", re.IGNORECASE),
     re.compile(r"出品終了", re.IGNORECASE),

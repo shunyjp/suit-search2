@@ -2,13 +2,16 @@
 
 Responsibilities (site-specific layer only):
 1. Build search URLs for Yahoo Auctions.
-2. Define the CSS selector map for text-bucket extraction.
-3. Post-process raw fetcher output into PageSignals.
+2. Extract structured data via __NEXT_DATA__ (embedded JSON) for reliable parsing.
+3. Fall back to CSS selectors for image_urls and category_text.
 
-Selectors are limited to:
-- title, price, buy-now price, status, description, specs, brand, category, images
+Primary data source: window.__NEXT_DATA__.props.pageProps.initialState.item.detail.item
+  - title, descriptionHtml (full description with size/material), price, bidorbuy,
+    status (open/close), leftTime, chargeForShipping, conditionName
 
-Size / material data are NOT extracted via selectors here.
+CSS selectors (Yahoo ships hashed class names so only stable patterns are used):
+  - image_urls: img[src*='auctions.c.yimg.jp']
+  - category_text: [class*='gv-Breadcrumb']
 """
 
 from __future__ import annotations
@@ -23,39 +26,10 @@ from app.connectors.base import BaseConnector, PageSignals
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# CSS selector map (Yahoo! Auctions – verified structure as of 2024)
-# NOTE: Update these when Yahoo changes their DOM.
-# ---------------------------------------------------------------------------
-
-SELECTORS: dict[str, str] = {
-    # Title
-    "title_text": "h1.ProductTitle__text",
-    # Full price area – captures current bid AND buy-now price in one text bucket
-    # (using .Price__value only gets the first match; .Price captures both)
-    "price_text": ".Price",
-    # Status area (contains remaining time, bid count, sold/active label)
-    "status_text": ".AuctionStatus",
-    # Item description / seller comment
-    "description_text": ".ItemDescription",
-    # Spec table (size/material sometimes appear here as free text)
-    "specs_text": ".ProductDetail__section",
-    # Brand – last Breadcrumb__link is usually the brand/item category
-    # We'll capture the full Breadcrumb and parse brand from it
-    "brand_text": ".Breadcrumb",
-    # Category breadcrumb (same element – used as category context)
-    "category_text": ".Breadcrumb",
-    # Product images
-    "image_urls": ".ProductImage__image",
-}
-
-# Fallback generic selectors (tried if primary fails)
-_FALLBACK_SELECTORS: dict[str, str] = {
-    "title_text": "h1",
-    "price_text": "[class*='Price']",
-    "description_text": "[class*='Description'], [class*='detail'], [class*='Detail']",
-    "status_text": "[class*='Status'], [class*='Auction']",
-}
+# CSS selectors used only for fields not available in __NEXT_DATA__
+_CSS_IMAGE_SEL = "img[src*='auctions.c.yimg.jp']"
+_CSS_CATEGORY_SEL = "[class*='gv-Breadcrumb']"
+_CSS_TITLE_SEL = "h1"  # fallback if __NEXT_DATA__ unavailable
 
 # ---------------------------------------------------------------------------
 # Search URL builder
@@ -96,7 +70,7 @@ def build_search_url(
 
 def build_item_url(item_id: str) -> str:
     """Build a direct item URL from its Yahoo Auctions item ID."""
-    return f"https://page.auctions.yahoo.co.jp/jp/auction/{item_id}"
+    return f"https://auctions.yahoo.co.jp/jp/auction/{item_id}"
 
 
 # ---------------------------------------------------------------------------
@@ -109,8 +83,9 @@ _CURRENT_INLINE = re.compile(r"現在[：:\s]*([0-9,]+)\s*円")
 
 
 # Item URL patterns on Yahoo Auctions search results
+# Yahoo changed the item URL format: page.auctions.yahoo.co.jp → auctions.yahoo.co.jp
 _ITEM_URL_RE = re.compile(
-    r"https?://page\.auctions\.yahoo\.co\.jp/jp/auction/[a-zA-Z0-9]+"
+    r"https?://(?:page\.)?auctions\.yahoo\.co\.jp/(?:jp/)?auction/[a-zA-Z0-9]+"
 )
 _ITEM_ID_RE = re.compile(r"/auction/([a-zA-Z0-9]+)")
 
@@ -136,7 +111,7 @@ def _extract_item_urls_from_html(html: str) -> list[str]:
     for Yahoo Auctions item URL pattern.
     """
     soup = BeautifulSoup(html, "html.parser")
-    _ITEM_URL_PATTERN = "page.auctions.yahoo.co.jp/jp/auction/"
+    _ITEM_URL_PATTERN = "auctions.yahoo.co.jp"
     seen: set[str] = set()
     result: list[str] = []
     for tag in soup.find_all("a", href=True):
@@ -149,14 +124,58 @@ def _extract_item_urls_from_html(html: str) -> list[str]:
     return result
 
 
-def _postprocess(raw: dict) -> dict:
-    """Apply site-specific fixes to the raw fetch result.
+def _apply_next_data(signals: dict, item: dict) -> None:
+    """Populate signals dict from Yahoo __NEXT_DATA__ item object.
 
-    Yahoo Auctions sometimes merges current + buy-now into the same
-    price element. This split ensures both are visible in price_text.
+    item = props.pageProps.initialState.item.detail.item
     """
-    # Nothing special needed right now – raw is used as-is
-    return raw
+    # Title
+    signals["title_text"] = item.get("title", "")
+
+    # Description: HTML → plain text (contains sizes, materials, condition)
+    desc_html = item.get("descriptionHtml") or item.get("description") or ""
+    if desc_html:
+        soup = BeautifulSoup(desc_html, "html.parser")
+        signals["description_text"] = soup.get_text(separator="\n").strip()
+
+    # Use description as all_text so all parsers see it
+    signals["all_text"] = signals["description_text"]
+
+    # Price text: format for price parser
+    price = int(item.get("price") or 0)
+    bidorbuy = int(item.get("bidorbuy") or 0)
+    bids = int(item.get("bids") or 0)
+    charge = item.get("chargeForShipping", "")
+
+    parts: list[str] = []
+    if bidorbuy > 0:
+        parts.append(f"即決 {bidorbuy:,}円")
+    if price > 0 and (bids > 0 or bidorbuy == 0):
+        # Show current price when there are bids or there is no buy-now
+        parts.append(f"現在 {price:,}円")
+    if charge == "seller":
+        parts.append("送料込み")
+    signals["price_text"] = "\n".join(parts)
+
+    # Status text: format for status parser
+    status = item.get("status", "")
+    left_sec = float(item.get("leftTime") or 0)
+    if status == "open":
+        if left_sec < 3600:
+            signals["status_text"] = f"残り{int(left_sec / 60)}分"
+        elif left_sec < 86400:
+            signals["status_text"] = f"残り{int(left_sec / 3600)}時間"
+        else:
+            signals["status_text"] = f"残り{int(left_sec / 86400)}日"
+    elif status == "close":
+        signals["status_text"] = "終了"
+    else:
+        signals["status_text"] = status
+
+    # Specs: condition label
+    condition = item.get("conditionName", "")
+    if condition:
+        signals["specs_text"] = f"商品の状態: {condition}"
 
 
 # ---------------------------------------------------------------------------
@@ -171,18 +190,66 @@ class YahooAuctionsConnector(BaseConnector):
         self.wait_ms = wait_ms
 
     async def fetch_page_signals(self, url: str) -> PageSignals:
-        """Fetch a single Yahoo Auctions item page and return PageSignals."""
-        from app.fetchers.rendered_fetcher import fetch_rendered  # lazy – requires playwright
+        """Fetch a Yahoo Auctions item page and return PageSignals.
+
+        Primary data source: __NEXT_DATA__ embedded JSON (reliable, structured).
+        CSS selectors used only for image_urls and category_text.
+        """
+        from app.fetchers.browser import browser_context
+        from app.fetchers.rendered_fetcher import _safe_attr, _safe_text
+        from playwright.async_api import TimeoutError as PWTimeoutError
 
         logger.info("Fetching Yahoo Auctions page: %s", url)
-        raw = await fetch_rendered(
-            url=url,
-            headless=self.headless,
-            wait_ms=self.wait_ms,
-            selectors=SELECTORS,
-        )
-        raw = _postprocess(raw)
-        return PageSignals(**{k: v for k, v in raw.items() if k in PageSignals.model_fields})
+
+        signals: dict = {
+            "url": url,
+            "title_text": "",
+            "price_text": "",
+            "status_text": "",
+            "description_text": "",
+            "all_text": "",
+            "specs_text": "",
+            "brand_text": "",
+            "category_text": "",
+            "image_urls": [],
+        }
+
+        async with browser_context(headless=self.headless) as ctx:
+            page = await ctx.new_page()
+            try:
+                await page.goto(url, timeout=30_000, wait_until="domcontentloaded")
+                await page.wait_for_timeout(self.wait_ms)
+
+                # Extract __NEXT_DATA__ for structured item fields
+                next_data = await page.evaluate("""
+                    () => {
+                        const el = document.getElementById('__NEXT_DATA__');
+                        return el ? JSON.parse(el.textContent) : null;
+                    }
+                """)
+                if next_data:
+                    try:
+                        item = (next_data["props"]["pageProps"]
+                                ["initialState"]["item"]["detail"]["item"])
+                        _apply_next_data(signals, item)
+                    except (KeyError, TypeError) as exc:
+                        logger.warning("__NEXT_DATA__ parse failed: %s", exc)
+
+                # CSS selectors for fields not in __NEXT_DATA__
+                signals["image_urls"] = await _safe_attr(page, _CSS_IMAGE_SEL, "src")
+                if not signals["category_text"]:
+                    signals["category_text"] = await _safe_text(page, _CSS_CATEGORY_SEL)
+                if not signals["title_text"]:
+                    signals["title_text"] = await _safe_text(page, _CSS_TITLE_SEL)
+
+            except PWTimeoutError:
+                logger.warning("Timeout fetching %s", url)
+            except Exception as exc:
+                logger.error("Error fetching %s: %s", url, exc)
+            finally:
+                await page.close()
+
+        return PageSignals(**{k: v for k, v in signals.items() if k in PageSignals.model_fields})
 
     async def search(  # type: ignore[override]
         self,

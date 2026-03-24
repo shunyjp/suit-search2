@@ -40,7 +40,7 @@ from app.normalizers.units import parse_cm
 
 _NUM = r"(\d{1,3}(?:\.\d{1,2})?)"      # capture group: the numeric value
 _UNIT = r"(?:cm|CM|㎝|センチ)?"         # optional unit
-_SEP = r"[\s：:・/＝=]*"               # label–value separator
+_SEP = r"[\s：:・/＝=約]*"             # label–value separator (約 = approx.)
 
 
 def _pat(*labels: str) -> re.Pattern[str]:

@@ -33,4 +33,4 @@ class TestBuildSearchUrl:
 class TestBuildItemUrl:
     def test_item_url_format(self):
         url = build_item_url("x12345678")
-        assert url == "https://page.auctions.yahoo.co.jp/jp/auction/x12345678"
+        assert url == "https://auctions.yahoo.co.jp/jp/auction/x12345678"

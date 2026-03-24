@@ -10,11 +10,16 @@ Output: JSON with verdict, score, size, price, status, warnings.
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Ensure UTF-8 output on Windows
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 from app.workflows.crawl_job import run_crawl_job
 
