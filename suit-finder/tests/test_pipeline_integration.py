@@ -189,6 +189,70 @@ class TestNGScenariosEndToEnd:
         assert any("30,000" in r for r in decision.blocking_reasons)
 
 
+class TestNGPageFixture:
+    """Tests using the NG HTML fixture (double breasted, polyester, no buy-now, short inseam)."""
+
+    FIXTURE_HTML = FIXTURES / "mock_yahoo_auction_ng_page.html"
+
+    def _build_package_from_ng_html(self) -> EvidencePackage:
+        """Build an EvidencePackage from the NG HTML fixture using BeautifulSoup."""
+        from bs4 import BeautifulSoup
+        from app.connectors.base import PageSignals
+        from app.evidence.extractor import build_evidence_package
+
+        html = self.FIXTURE_HTML.read_text("utf-8")
+        soup = BeautifulSoup(html, "html.parser")
+
+        def _text(selector: str) -> str:
+            el = soup.select_one(selector)
+            return el.get_text(separator=" ", strip=True) if el else ""
+
+        signals = PageSignals(
+            url="https://page.auctions.yahoo.co.jp/jp/auction/ng_test_item",
+            title_text=_text("h1.ProductTitle__text"),
+            price_text=_text(".Price"),
+            status_text=_text(".AuctionStatus"),
+            description_text=_text(".ItemDescription"),
+            specs_text=_text(".ProductDetail__section"),
+            brand_text=_text(".Breadcrumb"),
+            category_text=_text(".Breadcrumb"),
+        )
+        return build_evidence_package(
+            url=signals.url,
+            signals=signals,
+            item_id="ng_test_item",
+        )
+
+    def test_ng_page_fixture_exists(self):
+        assert self.FIXTURE_HTML.exists()
+
+    def test_ng_page_verdict_is_no_match(self):
+        pkg = self._build_package_from_ng_html()
+        _, decision = _run_pipeline(pkg)
+        assert decision.verdict == "NO_MATCH"
+
+    def test_ng_page_no_buy_now_blocking(self):
+        pkg = self._build_package_from_ng_html()
+        _, decision = _run_pipeline(pkg)
+        assert any("即決" in r for r in decision.blocking_reasons)
+
+    def test_ng_page_polyester_blocking(self):
+        pkg = self._build_package_from_ng_html()
+        _, decision = _run_pipeline(pkg)
+        assert any("polyester" in r for r in decision.blocking_reasons)
+
+    def test_ng_page_double_breasted_blocking(self):
+        pkg = self._build_package_from_ng_html()
+        _, decision = _run_pipeline(pkg)
+        assert any("ダブル" in r for r in decision.blocking_reasons)
+
+    def test_ng_page_short_inseam_blocking(self):
+        """股下69cm is ≤ 70cm → absolute NG."""
+        pkg = self._build_package_from_ng_html()
+        _, decision = _run_pipeline(pkg)
+        assert any("股下" in r for r in decision.blocking_reasons)
+
+
 class TestExtractItemUrls:
     def test_extract_from_text(self):
         from app.connectors.yahoo_auctions import _extract_item_urls
