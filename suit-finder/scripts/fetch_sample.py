@@ -24,13 +24,20 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.connectors.yahoo_auctions import YahooAuctionsConnector
+from app.connectors.paypay_flea_market import PayPayFleaMarketConnector
 from app.evidence.extractor import build_evidence_package
+
+
+def _connector_for_url(url: str):
+    if "paypayfleamarket.yahoo.co.jp" in url:
+        return PayPayFleaMarketConnector(headless=True)
+    return YahooAuctionsConnector(headless=True)
 
 
 async def main(url: str) -> None:
     print(f"Fetching: {url}\n")
 
-    connector = YahooAuctionsConnector(headless=True)
+    connector = _connector_for_url(url)
     signals = await connector.fetch_page_signals(url)
 
     print("=== PageSignals ===")

@@ -10,12 +10,21 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from app.connectors.base import (
+    BaseConnector,
     DecisionOutput,
     EvidencePackage,
     MergedStructuredAttributes,
     ParserInput,
 )
 from app.connectors.yahoo_auctions import YahooAuctionsConnector
+from app.connectors.paypay_flea_market import PayPayFleaMarketConnector
+
+
+def _connector_for_url(url: str, headless: bool = True) -> BaseConnector:
+    """Return the appropriate connector based on the URL domain."""
+    if "paypayfleamarket.yahoo.co.jp" in url:
+        return PayPayFleaMarketConnector(headless=headless)
+    return YahooAuctionsConnector(headless=headless)
 from app.evidence.cleaner import clean_blocks
 from app.evidence.extractor import build_evidence_package
 from app.evidence.merger import merge_attributes
@@ -56,7 +65,7 @@ async def run_crawl_job(url: str, headless: bool = True) -> CrawlResult:
     Exceptions are caught and returned as CrawlResult(success=False).
     """
     try:
-        connector = YahooAuctionsConnector(headless=headless)
+        connector = _connector_for_url(url, headless=headless)
         signals = await connector.fetch_page_signals(url)
 
         package = build_evidence_package(url=url, signals=signals)
