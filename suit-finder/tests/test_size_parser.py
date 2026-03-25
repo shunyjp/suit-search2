@@ -80,6 +80,15 @@ class TestPantsMeasurements:
         assert out.pants.waist_circumference_cm.value == 87.0
         assert out.pants.waist_flat_cm is None
 
+    def test_waist_jissun_treated_as_circumference(self):
+        """ウエスト実寸 is a circumference (girth) measurement, not flat."""
+        out = parse_size(_make_input("ウエスト実寸約86センチ"))
+        assert out.pants.waist_circumference_cm is not None
+        assert out.pants.waist_circumference_cm.value == 86.0
+        assert out.pants.waist_flat_cm is None
+        # No spurious "妥当範囲外" warning
+        assert not any("妥当範囲外" in w for w in out.warnings)
+
     def test_waist_plain_small_treated_as_flat(self):
         out = parse_size(_make_input("ウエスト：43cm"))
         assert out.pants.waist_flat_cm is not None
