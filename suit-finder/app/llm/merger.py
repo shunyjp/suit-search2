@@ -86,6 +86,13 @@ def merge_llm_size(
             if mv is not None:
                 setattr(pants, attr, mv)
                 filled.append(llm_key)
+            elif llm_key == "pants_waist_flat_cm" and pants.waist_circumference_cm is None:
+                # LLM returned a waist value that failed flat plausibility (>60cm).
+                # Try storing as circumference instead (e.g. 74cm = girth measurement).
+                mv_circ = _make_llm_measurement("pants_waist_circ_cm", llm_result[llm_key], warnings)
+                if mv_circ is not None:
+                    pants.waist_circumference_cm = mv_circ
+                    filled.append(llm_key)
 
     if not filled:
         return size
