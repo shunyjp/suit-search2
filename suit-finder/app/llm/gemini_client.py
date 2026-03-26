@@ -14,7 +14,7 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = "gemini-2.0-flash"
+_DEFAULT_MODEL = "gemini-2.0-flash-lite"
 
 
 class GeminiClient:
