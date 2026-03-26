@@ -81,7 +81,7 @@ class GeminiClient:
                 logger.debug("No images downloaded – skipping image supplement")
                 return None
 
-            parts.append(genai_types.Part.from_text(prompt))
+            parts.append(genai_types.Part(text=prompt))
 
             response = await asyncio.to_thread(
                 self._client.models.generate_content,
