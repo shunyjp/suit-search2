@@ -18,24 +18,30 @@ _DEFAULT_MODEL = "gemini-2.0-flash"
 
 
 class GeminiClient:
-    """Async wrapper around the google-generativeai SDK."""
+    """Async wrapper around the google-genai SDK."""
 
     def __init__(self, api_key: str, model: str = _DEFAULT_MODEL) -> None:
-        import google.generativeai as genai  # lazy import: optional dependency
+        from google import genai  # lazy import: optional dependency
 
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(
-            model_name=model,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-                temperature=0.0,
-            ),
-        )
+        self._client = genai.Client(api_key=api_key)
+        self._model = model
+        self._config = {"response_mime_type": "application/json", "temperature": 0.0}
 
     async def generate_json(self, prompt: str) -> Optional[dict[str, Any]]:
         """Send prompt, return parsed JSON dict.  Returns None on any error."""
         try:
-            response = await asyncio.to_thread(self._model.generate_content, prompt)
+            from google.genai import types as genai_types
+
+            config = genai_types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.0,
+            )
+            response = await asyncio.to_thread(
+                self._client.models.generate_content,
+                model=self._model,
+                contents=prompt,
+                config=config,
+            )
             return json.loads(response.text)
         except Exception as exc:
             logger.warning("Gemini request failed: %s", exc)
