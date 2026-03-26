@@ -19,11 +19,12 @@ from typing import Optional
 from app.connectors.base import MaterialParserOutput, ParserInput, SizeParserOutput
 from app.llm.gemini_client import GeminiClient, client_from_env
 from app.llm.merger import merge_llm_material, merge_llm_size
-from app.llm.prompts import build_material_prompt, build_size_prompt
+from app.llm.prompts import build_material_prompt, build_size_prompt, build_size_prompt_for_images
 
 logger = logging.getLogger(__name__)
 
-_SIZE_UNKNOWN_THRESHOLD = 3  # trigger LLM if unknown_fields count exceeds this
+_SIZE_UNKNOWN_THRESHOLD = 3   # trigger LLM if unknown_fields count exceeds this
+_IMAGE_UNKNOWN_THRESHOLD = 5  # trigger image-based LLM if unknowns still exceed this
 
 
 def _needs_llm(size: SizeParserOutput, material: MaterialParserOutput) -> bool:
@@ -76,7 +77,7 @@ async def maybe_supplement(
         bool(material.outer_fibers),
     )
 
-    # Size supplement
+    # Size supplement – text-based
     if size.unknown_fields:
         size_result = await client.generate_json(
             build_size_prompt(text, size.unknown_fields)
@@ -84,6 +85,22 @@ async def maybe_supplement(
         if size_result:
             size = merge_llm_size(size, size_result)
             logger.debug("LLM size supplement: remaining unknowns=%s", size.unknown_fields)
+
+    # Size supplement – image-based (when text extraction is insufficient)
+    image_urls = parser_input.page_signals.image_urls
+    if len(size.unknown_fields) > _IMAGE_UNKNOWN_THRESHOLD and image_urls:
+        logger.info(
+            "Running image-based LLM supplement: %d unknowns, %d images available",
+            len(size.unknown_fields),
+            len(image_urls),
+        )
+        img_result = await client.generate_json_with_images(
+            build_size_prompt_for_images(size.unknown_fields),
+            image_urls,
+        )
+        if img_result:
+            size = merge_llm_size(size, img_result)
+            logger.debug("LLM image supplement: remaining unknowns=%s", size.unknown_fields)
 
     # Material supplement
     if not material.outer_fibers:

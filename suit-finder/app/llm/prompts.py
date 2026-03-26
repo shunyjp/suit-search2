@@ -49,6 +49,32 @@ JSONのみ返してください。説明は不要です。
 """
 
 
+def build_size_prompt_for_images(unknown_fields: list[str]) -> str:
+    """Prompt for image-based size extraction (no description text available).
+
+    Used when description text lacks measurements but images may contain
+    a size chart (採寸表).
+    """
+    target_lines = "\n".join(
+        f'  "{f}": {_SIZE_FIELD_LABELS.get(f, f)} の数値 (cm), なければ null'
+        for f in unknown_fields
+        if f in _SIZE_FIELD_LABELS
+    )
+    if not target_lines:
+        target_lines = '  "note": "対象フィールドなし"'
+
+    return f"""\
+添付した画像はメンズスーツの商品ページの写真です。
+採寸表（サイズ表）が含まれている画像を探し、寸法情報を読み取ってください。
+見つからない項目は null にしてください。数値のみ（単位なし）で記入してください。
+
+抽出してほしい項目 (cm単位の数値):
+{target_lines}
+
+JSONのみ返してください。説明は不要です。
+"""
+
+
 def build_material_prompt(text: str) -> str:
     """Prompt to extract fiber composition from product description."""
     return f"""\

@@ -21,6 +21,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
+import logging
+logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
+
 from app.workflows.crawl_job import run_crawl_job
 
 
