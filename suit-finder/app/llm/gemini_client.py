@@ -21,7 +21,7 @@ class GeminiClient:
     """Async wrapper around the google-genai SDK."""
 
     def __init__(self, api_key: str, model: str = _DEFAULT_MODEL) -> None:
-        from google import genai  # lazy import: optional dependency
+        import google.genai as genai  # lazy import: optional dependency
 
         self._client = genai.Client(api_key=api_key)
         self._model = model
@@ -30,6 +30,7 @@ class GeminiClient:
     async def generate_json(self, prompt: str) -> Optional[dict[str, Any]]:
         """Send prompt, return parsed JSON dict.  Returns None on any error."""
         try:
+            import google.genai as genai
             from google.genai import types as genai_types
 
             config = genai_types.GenerateContentConfig(
