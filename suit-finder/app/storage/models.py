@@ -14,12 +14,9 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Float,
-    Integer,
     String,
-    Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -37,7 +34,7 @@ class ListingRecord(Base):
     __tablename__ = "listing_records"
 
     id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4())
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
     url: Mapped[str] = mapped_column(String(2048), nullable=False, index=True)
     source_site: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

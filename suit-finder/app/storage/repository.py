@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 def _get_engine():
-    db_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost:5432/suitfinder")
-    return create_async_engine(db_url, echo=False, pool_pre_ping=True)
+    db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./suitfinder.db")
+    return create_async_engine(db_url, echo=False)
 
 
 _engine = None

@@ -36,6 +36,7 @@ from app.parsers.status_parser import parse_status
 from app.parsers.style_parser import parse_style
 from app.llm.supplement import maybe_supplement
 from app.rules.decision_engine import decide
+from app.storage.repository import ListingRepository, create_tables, get_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,16 @@ async def run_crawl_job(url: str, headless: bool = True) -> CrawlResult:
             size.warnings + price.warnings + status.warnings
             + material.warnings + style.warnings + condition.warnings
         )
+
+        # Persist to DB (non-blocking: errors are logged but do not fail the job)
+        try:
+            await create_tables()
+            async with get_session_factory()() as session:
+                async with session.begin():
+                    repo = ListingRepository(session)
+                    await repo.upsert_from_evidence(package, merged, decision)
+        except Exception as db_exc:
+            logger.warning("DB save failed (non-fatal): %s", db_exc)
 
         logger.info(
             "Crawl complete: %s → verdict=%s score=%.2f",
