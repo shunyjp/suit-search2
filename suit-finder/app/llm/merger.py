@@ -82,16 +82,29 @@ def merge_llm_size(
     }
     for llm_key, attr in _PANTS_MAP.items():
         if getattr(pants, attr) is None and llm_key in llm_result:
-            mv = _make_llm_measurement(llm_key, llm_result[llm_key], warnings)
-            if mv is not None:
-                setattr(pants, attr, mv)
-                filled.append(llm_key)
-            elif llm_key == "pants_waist_flat_cm" and pants.waist_circumference_cm is None:
-                # LLM returned a waist value that failed flat plausibility (>60cm).
-                # Try storing as circumference instead (e.g. 74cm = girth measurement).
-                mv_circ = _make_llm_measurement("pants_waist_circ_cm", llm_result[llm_key], warnings)
-                if mv_circ is not None:
-                    pants.waist_circumference_cm = mv_circ
+            if llm_key == "pants_waist_flat_cm":
+                # Try flat with a temporary warning buffer first.
+                tmp: list[str] = []
+                mv = _make_llm_measurement(llm_key, llm_result[llm_key], tmp)
+                if mv is not None:
+                    setattr(pants, attr, mv)
+                    filled.append(llm_key)
+                    warnings.extend(tmp)
+                elif pants.waist_circumference_cm is None:
+                    # Flat failed – try as circumference (e.g. 74 cm = girth).
+                    mv_circ = _make_llm_measurement("pants_waist_circ_cm", llm_result[llm_key], tmp)
+                    if mv_circ is not None:
+                        pants.waist_circumference_cm = mv_circ
+                        filled.append(llm_key)
+                        # Suppress the flat-range warning; value is valid as circumference.
+                    else:
+                        warnings.extend(tmp)  # Both failed – surface the warnings.
+                else:
+                    warnings.extend(tmp)
+            else:
+                mv = _make_llm_measurement(llm_key, llm_result[llm_key], warnings)
+                if mv is not None:
+                    setattr(pants, attr, mv)
                     filled.append(llm_key)
 
     if not filled:
