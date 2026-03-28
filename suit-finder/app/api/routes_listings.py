@@ -13,6 +13,25 @@ from app.storage.repository import ListingRepository, create_tables, get_session
 router = APIRouter()
 
 
+def _mv(size_dict: dict, *keys: str) -> Optional[float]:
+    """MeasurementValue を安全に展開して float を返す。
+
+    size_attrs は model_dump(mode='json') で保存されるため
+    measurement フィールドは {"value": float, ...} の dict になっている。
+    """
+    obj: object = size_dict
+    for k in keys:
+        if not isinstance(obj, dict):
+            return None
+        obj = obj.get(k)
+    if isinstance(obj, dict):
+        val = obj.get("value")
+        return float(val) if val is not None else None
+    if isinstance(obj, (int, float)):
+        return float(obj)
+    return None
+
+
 def _record_to_dict(r: ListingRecord) -> dict:
     signals = r.page_signals or {}
     price = r.price_attrs or {}
@@ -28,10 +47,19 @@ def _record_to_dict(r: ListingRecord) -> dict:
     current = price.get("current_price_jpy")
     price_jpy = buy_now or current
 
+    # source_site に応じたラベル
+    _SITE_LABELS = {
+        "yahoo_auctions":    "ヤフオク",
+        "yahoo_shopping":    "Yahoo!ショッピング",
+        "mercari":           "メルカリ",
+        "paypay_flea_market": "PayPayフリマ",
+    }
+
     return {
         "id": r.id,
         "url": r.url,
         "source_site": r.source_site,
+        "source_label": _SITE_LABELS.get(r.source_site or "", "サイト"),
         "title": signals.get("title_text") or "",
         "price_jpy": price_jpy,
         "score": r.score,
@@ -41,9 +69,10 @@ def _record_to_dict(r: ListingRecord) -> dict:
         "thumbnail": thumbnail,
         "normalized_status": status.get("normalized_status"),
         "button_count": style.get("button_count"),
-        "jacket_shoulder_cm": (size.get("jacket") or {}).get("shoulder_cm"),
-        "jacket_chest_cm": (size.get("jacket") or {}).get("chest_cm"),
-        "pants_waist_cm": (size.get("pants") or {}).get("waist_cm"),
+        # MeasurementValue の .value だけを返す（[object Object] 防止）
+        "jacket_shoulder_cm": _mv(size, "jacket", "shoulder_cm"),
+        "jacket_chest_cm":    _mv(size, "jacket", "chest_width_cm"),
+        "pants_waist_cm":     _mv(size, "pants", "waist_flat_cm"),
         "non_blocking_reasons": decision.get("non_blocking_reasons") or decision.get("reasons") or [],
         "blocking_reasons": decision.get("blocking_reasons") or [],
         "buy_now_price_jpy": price.get("buy_now_price_jpy"),

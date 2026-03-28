@@ -261,6 +261,12 @@ class MercariConnector(BaseConnector):
                             logger.warning("Mercari __NEXT_DATA__ parse error: %s", exc)
 
                 # ── CSS / JS fallbacks ───────────────────────────────────
+                # body.innerText は常に取得してフォールバック用に保持
+                try:
+                    body_text = await page.inner_text("body")
+                except Exception:
+                    body_text = ""
+
                 if not signals["title_text"]:
                     signals["title_text"] = (
                         await _safe_text(page, "h1")
@@ -271,19 +277,48 @@ class MercariConnector(BaseConnector):
                     signals["image_urls"] = await _safe_attr(
                         page, "img[src*='mercdn.net']", "src"
                     )
+
+                # ── Price fallback: Mercari は ¥X,XXX 表記（"円" なし）────
+                # price_parser は "即決 X円" 形式を期待するので変換する
+                if not signals["price_text"]:
+                    price_raw: str | None = await page.evaluate("""
+                        () => {
+                            // data-testid="price" が最も確実
+                            const el = document.querySelector('[data-testid="price"]');
+                            if (el) return el.textContent.trim();
+                            // class 名に "price" を含む要素を探す（¥マーク付き）
+                            const els = document.querySelectorAll('[class*="price"], [class*="Price"]');
+                            for (const e of els) {
+                                const t = e.textContent.trim();
+                                if (/[¥￥]/.test(t) && /[0-9]/.test(t)) return t;
+                            }
+                            return null;
+                        }
+                    """)
+                    if price_raw:
+                        # "¥6,699" / "¥6,699（税込）" → 数字だけ取り出す
+                        import re as _re
+                        m = _re.search(r'([\d,]+)', price_raw.replace('¥', '').replace('￥', ''))
+                        if m:
+                            price_val = int(m.group(1).replace(',', ''))
+                            if price_val > 0:
+                                shipping_incl = "送料込み" in body_text or "送料無料" in body_text
+                                signals["price_text"] = (
+                                    f"即決 {price_val:,}円"
+                                    + ("\n送料込み" if shipping_incl else "")
+                                )
+                                logger.info("Mercari price fallback: %s → 即決 %d円", url, price_val)
+
                 # Status: if __NEXT_DATA__ didn't provide it, inspect DOM
                 if not signals["status_text"]:
-                    body_text = await page.inner_text("body")
                     if "売り切れ" in body_text or "SOLD OUT" in body_text.upper():
                         signals["status_text"] = "終了"
                     else:
                         signals["status_text"] = "出品中"
-                # Fallback full-page text for all_text
-                if not signals["all_text"]:
-                    try:
-                        signals["all_text"] = await page.inner_text("body")
-                    except Exception:
-                        pass
+
+                # all_text: 説明文がなければ body テキスト全体を使う
+                if not signals["all_text"] and body_text:
+                    signals["all_text"] = body_text
 
             except PWTimeoutError:
                 logger.warning("Timeout fetching Mercari %s", url)

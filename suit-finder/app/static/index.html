@@ -525,7 +525,7 @@
           ${blockingNote}
           <div class="card-footer">
             <a class="card-link" href="${escHtml(item.url)}" target="_blank" rel="noopener">
-              Yahoo!オークションで確認 →
+              ${escHtml(item.source_label || 'サイト')}で確認 →
             </a>
             <div class="card-actions">
               <button class="btn-ng" data-id="${escHtml(item.id)}" onclick="markNg(this)">
