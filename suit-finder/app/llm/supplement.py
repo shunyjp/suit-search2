@@ -19,7 +19,12 @@ from typing import Optional
 from app.connectors.base import MaterialParserOutput, ParserInput, SizeParserOutput
 from app.llm.gemini_client import GeminiClient, client_from_env
 from app.llm.merger import merge_llm_material, merge_llm_size
-from app.llm.prompts import build_material_prompt, build_size_prompt, build_size_prompt_for_images
+from app.llm.prompts import (
+    build_material_prompt,
+    build_material_prompt_for_images,
+    build_size_prompt,
+    build_size_prompt_for_images,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -102,11 +107,30 @@ async def maybe_supplement(
             size = merge_llm_size(size, img_result)
             logger.debug("LLM image supplement: remaining unknowns=%s", size.unknown_fields)
 
-    # Material supplement
+    # Material supplement – テキストベース
     if not material.outer_fibers:
         mat_result = await client.generate_json(build_material_prompt(text))
         if mat_result:
             material = merge_llm_material(material, mat_result)
-            logger.debug("LLM material supplement: outer=%s", material.outer_fibers)
+            logger.debug("LLM material (text) supplement: outer=%s", material.outer_fibers)
+
+    # Material supplement – 画像ベース（テキストで素材が取れなかった場合）
+    # 例: 品質表示タグの写真、素材表が画像になっている出品
+    image_urls = parser_input.page_signals.image_urls
+    if not material.outer_fibers and image_urls:
+        logger.info(
+            "Running image-based material supplement: %d images available",
+            len(image_urls),
+        )
+        mat_img_result = await client.generate_json_with_images(
+            build_material_prompt_for_images(),
+            image_urls,
+            max_images=4,
+        )
+        if mat_img_result:
+            material = merge_llm_material(material, mat_img_result)
+            logger.info(
+                "LLM material (image) supplement: outer=%s", material.outer_fibers
+            )
 
     return size, material

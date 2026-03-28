@@ -96,3 +96,32 @@ fiber の値は英語小文字で: wool / polyester / mohair / cotton / silk /
 cashmere / linen / nylon / acrylic / polyurethane / rayon / other
 percentage は整数、不明なら null。
 """
+
+
+def build_material_prompt_for_images() -> str:
+    """Prompt for image-based material extraction.
+
+    Used when description text lacks fiber info but images may contain
+    a care label (品質表示タグ) or material description photo.
+    """
+    return """\
+添付した画像はメンズスーツの商品ページの写真です。
+品質表示タグ・素材表示・繊維組成の記載がある画像を探し、素材情報を読み取ってください。
+
+読み取り対象の例:
+- 「毛 100%」「ウール 70% ポリエステル 30%」のようなタグ
+- 「素材: ウール混」などの説明テキストが写った画像
+- 品質表示ラベル（JIS 表示タグ）
+
+見つからない場合は outer_fibers と lining_fibers を空配列 [] にしてください。
+
+以下のJSON形式のみ返してください:
+{
+  "outer_fibers": [{"fiber": "wool", "percentage": 100}],
+  "lining_fibers": [{"fiber": "polyester", "percentage": 100}]
+}
+
+fiber の値は英語小文字で: wool / polyester / mohair / cotton / silk /
+cashmere / linen / nylon / acrylic / polyurethane / rayon / other
+percentage は整数、不明なら null。
+"""
