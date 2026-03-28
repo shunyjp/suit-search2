@@ -165,3 +165,37 @@ class ListingRepository:
         decision["verdict"] = "NO_MATCH"
         record.decision_json = decision
         await self.session.flush()
+
+    async def mark_as_ok(self, record: ListingRecord, reason: str = "手動OK") -> None:
+        """Manually override verdict to MATCH (human approval)."""
+        record.verdict = "MATCH"
+        record.needs_recheck = False
+        decision = record.decision_json or {}
+        decision["blocking_reasons"] = []
+        decision["verdict"] = "MATCH"
+        decision["manual_override"] = reason
+        record.decision_json = decision
+        await self.session.flush()
+
+    async def delete_by_date(self, date_str: str) -> int:
+        """Delete records retrieved on the given date (YYYY-MM-DD, JST).
+
+        Returns the number of deleted rows.
+        """
+        from datetime import timedelta
+        from sqlalchemy import delete as sa_delete
+
+        # JST は UTC+9 なので date_str の 00:00 JST = UTC-9h 前日15:00 UTC
+        # ただし retrieved_at は UTC で保存されているため、±9h の UTC 範囲で絞る
+        from datetime import datetime as dt
+        jst_start = dt.fromisoformat(date_str + "T00:00:00").replace(
+            tzinfo=timezone.utc
+        ) - timedelta(hours=9)
+        jst_end = jst_start + timedelta(days=1)
+
+        stmt = sa_delete(ListingRecord).where(
+            ListingRecord.retrieved_at >= jst_start,
+            ListingRecord.retrieved_at < jst_end,
+        )
+        result = await self.session.execute(stmt)
+        return result.rowcount

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -139,3 +140,42 @@ async def mark_as_ng(item_id: str, body: NgRequest = NgRequest()) -> dict:
                 raise HTTPException(status_code=404, detail="商品が見つかりません")
             await repo.mark_as_ng(record, reason=body.reason)
     return {"ok": True, "id": item_id}
+
+
+class OkRequest(BaseModel):
+    reason: str = "手動OK"
+
+
+@router.post("/{item_id}/ok")
+async def mark_as_ok(item_id: str, body: OkRequest = OkRequest()) -> dict:
+    """Manually approve a listing as MATCH (human override for REVIEW items)."""
+    await create_tables()
+    factory = get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            repo = ListingRepository(session)
+            record = await repo.get_by_id(item_id)
+            if record is None:
+                raise HTTPException(status_code=404, detail="商品が見つかりません")
+            await repo.mark_as_ok(record, reason=body.reason)
+    return {"ok": True, "id": item_id}
+
+
+@router.delete("/today")  # NOTE: must be declared BEFORE any /{item_id} DELETE routes
+async def delete_today(date: Optional[str] = Query(None, description="YYYY-MM-DD (JST)")) -> dict:
+    """Delete all records retrieved on the given date (default = today JST).
+
+    Returns the number of deleted records.
+    """
+    await create_tables()
+    if date is None:
+        # 今日の日付を JST で求める
+        from datetime import timedelta
+        today_jst = (datetime.now(timezone.utc) + timedelta(hours=9)).strftime("%Y-%m-%d")
+        date = today_jst
+    factory = get_session_factory()
+    async with factory() as session:
+        async with session.begin():
+            repo = ListingRepository(session)
+            count = await repo.delete_by_date(date)
+    return {"ok": True, "deleted": count, "date": date}

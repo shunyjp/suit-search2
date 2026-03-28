@@ -74,13 +74,29 @@ def extract_evidence_blocks(signals: PageSignals) -> list[EvidenceBlock]:
     return blocks
 
 
+def _detect_source_site(url: str) -> str:
+    """URLからソースサイトを自動判定する。"""
+    if "mercari.com" in url:
+        return "mercari"
+    if "store.shopping.yahoo.co.jp" in url:
+        return "yahoo_shopping"
+    if "paypayfleamarket.yahoo.co.jp" in url:
+        return "paypay_flea_market"
+    return "yahoo_auctions"
+
+
 def build_evidence_package(
     url: str,
     signals: PageSignals,
     item_id: str | None = None,
-    source_site: str = "yahoo_auctions",
+    source_site: str | None = None,
 ) -> EvidencePackage:
-    """Build a full EvidencePackage from a URL and its PageSignals."""
+    """Build a full EvidencePackage from a URL and its PageSignals.
+
+    source_site が省略された場合は URL から自動判定する。
+    """
+    if source_site is None:
+        source_site = _detect_source_site(url)
     blocks = extract_evidence_blocks(signals)
     pkg = EvidencePackage(
         url=url,

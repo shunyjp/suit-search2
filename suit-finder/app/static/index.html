@@ -310,6 +310,20 @@
     }
     .btn-ng:hover { background: #fee2e2; }
     .btn-ng:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-ok {
+      flex: 1;
+      padding: 7px;
+      border-radius: 8px;
+      border: 1px solid #6ee7b7;
+      background: #fff;
+      color: #047857;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-ok:hover { background: #d1fae5; }
+    .btn-ok:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* NG 確定アニメーション */
     @keyframes fadeOut {
@@ -397,6 +411,7 @@
     </select>
   </label>
   <button class="btn btn-secondary" id="refresh-btn">🔄 更新</button>
+  <button class="btn btn-secondary" id="delete-today-btn" title="本日（JST）取得した判定結果をすべて削除します" style="background:#fee2e2;color:#b91c1c;">🗑 本日分削除</button>
   <button class="btn btn-primary" id="judge-btn">＋ 新着50件を追加判定</button>
 </div>
 
@@ -528,6 +543,10 @@
               ${escHtml(item.source_label || 'サイト')}で確認 →
             </a>
             <div class="card-actions">
+              ${item.verdict === 'REVIEW' ? `
+              <button class="btn-ok" data-id="${escHtml(item.id)}" onclick="markOk(this)">
+                ✅ OKにする
+              </button>` : ''}
               <button class="btn-ng" data-id="${escHtml(item.id)}" onclick="markNg(this)">
                 ❌ NG にする
               </button>
@@ -579,12 +598,12 @@
   async function loadStats() {
     try {
       const res = await fetch(`${BASE}/listings/stats`);
-      if (!res.ok) return;
+      if (!res.ok) { console.warn('stats endpoint error:', res.status); return; }
       const s = await res.json();
       document.getElementById('stat-match').textContent  = (s.MATCH || 0) + (s.REVIEW || 0);
       document.getElementById('stat-review').textContent = s.REVIEW || 0;
       document.getElementById('stat-ng').textContent     = s.NO_MATCH || 0;
-    } catch (_) { /* stats are best-effort */ }
+    } catch (e) { console.warn('loadStats failed:', e); }
   }
 
   // ── Load listings (candidates only, limit 200) ─────────────
@@ -790,18 +809,64 @@
       card.classList.add('removing');
       card.addEventListener('animationend', () => {
         allItems = allItems.filter(i => i.id !== id);
-        // 統計更新
-        const matchCount  = allItems.filter(i => i.verdict === 'MATCH').length;
-        const reviewCount = allItems.filter(i => i.verdict === 'REVIEW').length;
-        document.getElementById('stat-match').textContent  = matchCount + reviewCount;
-        document.getElementById('stat-review').textContent = reviewCount;
-        document.getElementById('stat-ng').textContent     = allItems.filter(i => i.verdict === 'NO_MATCH').length;
         applyFilters();
+        loadStats();   // DB から累積カウントを再取得
       }, { once: true });
     } catch (e) {
       btn.disabled = false;
       btn.textContent = '❌ NG にする';
       showToast('NG 更新に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // ── 手動 OK 操作 ────────────────────────────────────────────
+  async function markOk(btn) {
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+
+    try {
+      const res = await fetch(`${BASE}/listings/${id}/ok`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: '手動OK' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      // verdict を MATCH に変更してカードを再描画（フェードなし）
+      const item = allItems.find(i => i.id === id);
+      if (item) {
+        item.verdict = 'MATCH';
+      }
+      applyFilters();
+      loadStats();
+      showToast('✅ OKに変更しました', '');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '✅ OKにする';
+      showToast('OK 更新に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // ── 本日分削除 ──────────────────────────────────────────────
+  async function deleteToday() {
+    if (!confirm('本日（JST）取得した判定結果をすべて削除しますか？\nこの操作は取り消せません。')) return;
+
+    const deleteTodayBtn = document.getElementById('delete-today-btn');
+    deleteTodayBtn.disabled = true;
+    deleteTodayBtn.textContent = '削除中…';
+
+    try {
+      const res = await fetch(`${BASE}/listings/today`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      showToast(`🗑 ${data.deleted}件 削除しました（${data.date}）`, '');
+      await loadListings();   // 一覧とカウンタを更新
+    } catch (e) {
+      showToast('削除に失敗しました: ' + e.message, 'error');
+    } finally {
+      deleteTodayBtn.disabled = false;
+      deleteTodayBtn.textContent = '🗑 本日分削除';
     }
   }
 
@@ -831,6 +896,7 @@
 
   refreshBtn.addEventListener('click', loadListings);
   judgeBtn.addEventListener('click', startBatchJob);
+  document.getElementById('delete-today-btn').addEventListener('click', deleteToday);
   closePanelBtn.addEventListener('click', () => {
     jobPanel.className = 'job-panel';
   });

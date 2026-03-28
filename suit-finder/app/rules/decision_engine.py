@@ -159,15 +159,15 @@ def _check_pants_size(attrs: MergedStructuredAttributes) -> tuple[list[str], lis
     notes: list[str] = []
     pts = attrs.size.pants
 
-    # Waist
+    # Waist（範囲外は blocking に昇格 – 合わないスーツは確実にNG）
     if pts.waist_flat_cm is not None:
         v = pts.waist_flat_cm.value
         if not (PANTS_WAIST_FLAT_MIN <= v <= PANTS_WAIST_FLAT_MAX):
-            notes.append(rsn.out_of_range("ウエスト平置き", v, PANTS_WAIST_FLAT_MIN, PANTS_WAIST_FLAT_MAX))
+            blocking.append(rsn.out_of_range("ウエスト平置き", v, PANTS_WAIST_FLAT_MIN, PANTS_WAIST_FLAT_MAX))
     elif pts.waist_circumference_cm is not None:
         v = pts.waist_circumference_cm.value
         if not (PANTS_WAIST_CIRC_MIN <= v <= PANTS_WAIST_CIRC_MAX):
-            notes.append(rsn.out_of_range("ウエスト周り", v, PANTS_WAIST_CIRC_MIN, PANTS_WAIST_CIRC_MAX))
+            blocking.append(rsn.out_of_range("ウエスト周り", v, PANTS_WAIST_CIRC_MIN, PANTS_WAIST_CIRC_MAX))
     else:
         notes.append(rsn.UNKNOWN_WAIST)
 
