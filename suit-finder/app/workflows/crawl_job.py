@@ -18,12 +18,18 @@ from app.connectors.base import (
 )
 from app.connectors.yahoo_auctions import YahooAuctionsConnector
 from app.connectors.paypay_flea_market import PayPayFleaMarketConnector
+from app.connectors.yahoo_shopping import YahooShoppingConnector
+from app.connectors.mercari import MercariConnector
 
 
 def _connector_for_url(url: str, headless: bool = True) -> BaseConnector:
     """Return the appropriate connector based on the URL domain."""
     if "paypayfleamarket.yahoo.co.jp" in url:
         return PayPayFleaMarketConnector(headless=headless)
+    if "store.shopping.yahoo.co.jp" in url:
+        return YahooShoppingConnector()
+    if "mercari.com" in url:
+        return MercariConnector(headless=headless)
     return YahooAuctionsConnector(headless=headless)
 from app.evidence.cleaner import clean_blocks
 from app.evidence.extractor import build_evidence_package
@@ -52,7 +58,7 @@ class CrawlResult:
     warnings: list[str] = field(default_factory=list)
 
 
-async def run_crawl_job(url: str, headless: bool = True) -> CrawlResult:
+async def run_crawl_job(url: str, headless: bool = True, save_db: bool = True) -> CrawlResult:
     """Fetch a Yahoo Auctions listing and run the full pipeline.
 
     Steps:
@@ -106,14 +112,17 @@ async def run_crawl_job(url: str, headless: bool = True) -> CrawlResult:
         )
 
         # Persist to DB (non-blocking: errors are logged but do not fail the job)
-        try:
-            await create_tables()
-            async with get_session_factory()() as session:
-                async with session.begin():
-                    repo = ListingRepository(session)
-                    await repo.upsert_from_evidence(package, merged, decision)
-        except Exception as db_exc:
-            logger.warning("DB save failed (non-fatal): %s", db_exc)
+        # save_db=False when called from the batch pipeline, which handles
+        # its own DB write (with proper needs_recheck) in a separate phase.
+        if save_db:
+            try:
+                await create_tables()
+                async with get_session_factory()() as session:
+                    async with session.begin():
+                        repo = ListingRepository(session)
+                        await repo.upsert_from_evidence(package, merged, decision)
+            except Exception as db_exc:
+                logger.warning("DB save failed (non-fatal): %s", db_exc)
 
         logger.info(
             "Crawl complete: %s → verdict=%s score=%.2f",

@@ -10,7 +10,7 @@ import logging
 import os
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.connectors.base import (
@@ -25,7 +25,14 @@ logger = logging.getLogger(__name__)
 
 def _get_engine():
     db_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./suitfinder.db")
-    return create_async_engine(db_url, echo=False)
+    if db_url.startswith("sqlite"):
+        # SQLite: wait up to 30 s for a write lock instead of immediately failing
+        return create_async_engine(
+            db_url,
+            echo=False,
+            connect_args={"timeout": 30},
+        )
+    return create_async_engine(db_url, echo=False, pool_pre_ping=True)
 
 
 _engine = None
@@ -56,6 +63,7 @@ class ListingRepository:
         package: EvidencePackage,
         merged: MergedStructuredAttributes,
         decision: DecisionOutput,
+        needs_recheck: bool = False,
     ) -> ListingRecord:
         """Insert or update a ListingRecord from pipeline outputs."""
         stmt = select(ListingRecord).where(ListingRecord.url == package.url)
@@ -78,6 +86,7 @@ class ListingRepository:
         record.verdict = decision.verdict
         record.score = decision.score
         record.decision_json = decision.model_dump(mode="json")
+        record.needs_recheck = needs_recheck
         record.retrieved_at = package.retrieved_at
 
         await self.session.flush()
@@ -89,13 +98,70 @@ class ListingRepository:
         return result.scalar_one_or_none()
 
     async def list_by_verdict(
-        self, verdict: str, limit: int = 100
+        self,
+        verdict: str,
+        limit: int = 100,
+        sort: str = "score",   # "score" | "recent"
     ) -> list[ListingRecord]:
+        order = (
+            ListingRecord.retrieved_at.desc()
+            if sort == "recent"
+            else ListingRecord.score.desc()
+        )
         stmt = (
             select(ListingRecord)
             .where(ListingRecord.verdict == verdict)
-            .order_by(ListingRecord.score.desc())
+            .order_by(order)
             .limit(limit)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars())
+
+    async def count_by_verdict(self) -> dict[str, int]:
+        """Return total record count grouped by verdict (no LIMIT)."""
+        stmt = select(
+            ListingRecord.verdict,
+            func.count(ListingRecord.id).label("cnt"),
+        ).group_by(ListingRecord.verdict)
+        result = await self.session.execute(stmt)
+        return {row.verdict: row.cnt for row in result if row.verdict}
+
+    async def list_active_matches(self) -> list[ListingRecord]:
+        """Return all MATCH records that are still active (for status recheck)."""
+        stmt = (
+            select(ListingRecord)
+            .where(ListingRecord.verdict == "MATCH")
+            .where(ListingRecord.is_active == True)  # noqa: E712
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars())
+
+    async def update_status(
+        self,
+        record: ListingRecord,
+        is_active: bool,
+        status_attrs: dict,
+    ) -> None:
+        """Update listing status after a recheck (no full re-parse)."""
+        record.is_active = is_active
+        record.status_attrs = status_attrs
+        await self.session.flush()
+
+    async def get_by_id(self, item_id: str) -> Optional[ListingRecord]:
+        stmt = select(ListingRecord).where(ListingRecord.id == item_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def mark_as_ng(self, record: ListingRecord, reason: str = "手動NG") -> None:
+        """Manually override verdict to NO_MATCH and lock from future rechecks."""
+        record.verdict = "NO_MATCH"
+        record.needs_recheck = False
+        # Append the manual reason to decision_json for audit trail
+        decision = record.decision_json or {}
+        blocking = decision.get("blocking_reasons", [])
+        if reason not in blocking:
+            blocking.insert(0, reason)
+        decision["blocking_reasons"] = blocking
+        decision["verdict"] = "NO_MATCH"
+        record.decision_json = decision
+        await self.session.flush()

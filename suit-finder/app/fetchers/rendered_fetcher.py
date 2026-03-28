@@ -106,3 +106,32 @@ async def fetch_rendered(
             await page.close()
 
     return result
+
+
+async def fetch_page_html(
+    url: str,
+    headless: bool = True,
+    wait_ms: int = DEFAULT_WAIT_MS,
+    wait_until: str = "networkidle",
+) -> str:
+    """Fetch a rendered page and return full HTML (page.content()).
+
+    Unlike fetch_rendered which returns inner text, this returns the raw HTML
+    including all href/src attributes needed for link extraction.
+    Uses networkidle by default to wait for JS-driven content to finish loading.
+    Returns empty string on failure.
+    """
+    async with browser_context(headless=headless) as ctx:
+        page = await ctx.new_page()
+        try:
+            await page.goto(url, timeout=DEFAULT_TIMEOUT_MS, wait_until=wait_until)
+            if wait_ms > 0:
+                await page.wait_for_timeout(wait_ms)
+            return await page.content()
+        except PWTimeoutError:
+            logger.warning("Timeout fetching HTML %s", url)
+        except Exception as exc:
+            logger.error("Error fetching HTML %s: %s", url, exc)
+        finally:
+            await page.close()
+    return ""

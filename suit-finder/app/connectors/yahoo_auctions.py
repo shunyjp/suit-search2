@@ -12,11 +12,17 @@ Primary data source: window.__NEXT_DATA__.props.pageProps.initialState.item.deta
 CSS selectors (Yahoo ships hashed class names so only stable patterns are used):
   - image_urls: img[src*='auctions.c.yimg.jp']
   - category_text: [class*='gv-Breadcrumb']
+
+Search:
+  Uses Yahoo Japan Auction Search API (https://developer.yahoo.co.jp/webapi/auctions/).
+  Requires YAHOO_AUCTION_APP_ID environment variable.
+  Register at: https://e.developer.yahoo.co.jp/register
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import re
 from urllib.parse import urlencode
 
@@ -37,8 +43,15 @@ _CSS_TITLE_SEL = "h1"  # fallback if __NEXT_DATA__ unavailable
 
 BASE_SEARCH_URL = "https://auctions.yahoo.co.jp/search/search"
 
-# Category for men's suits on Yahoo Auctions
-MENSWEAR_CATEGORY = "2084228408"  # スーツ（メンズ）
+# Yahoo Auction Search API (AuctionWebService) – blocked for new app registrations (403).
+# Kept as constant for reference; search() uses Shopping API instead.
+_AUCTION_API_URL = "https://auctions.yahooapis.jp/AuctionWebService/V2/json/search"
+
+# Yahoo Shopping API – used for search() (returns used items, condition=used)
+_SHOPPING_API_URL = "https://shopping.yahooapis.jp/ShoppingWebService/V3/itemSearch"
+
+# Category for men's fashion on Yahoo Auctions (suits appear under this category)
+MENSWEAR_CATEGORY = "23176"  # メンズファッション > スーツ
 
 
 def build_search_url(
@@ -47,16 +60,27 @@ def build_search_url(
     min_price: int | None = None,
     max_price: int | None = 30_000,
     page: int = 1,
+    sort: str = "new",
 ) -> str:
-    """Build a Yahoo Auctions search URL."""
+    """Build a Yahoo Auctions search URL.
+
+    Args:
+        sort: "new" (新着順, default) | "score" (関連度順) | "price_asc" | "price_desc"
+    """
+    _SORT_MAP = {
+        "new":        ("new", "d"),
+        "score":      ("score", "d"),
+        "price_asc":  ("cbids", "a"),
+        "price_desc": ("cbids", "d"),
+    }
+    s1, o1 = _SORT_MAP.get(sort, ("new", "d"))
+
     params: dict[str, str | int] = {
         "p": query,
-        "va": query,
-        "tab_ex": "commerce",
-        "fr": "auc_prop",
-        "alocale": "0jp",
         "b": (page - 1) * 50 + 1,
         "n": 50,
+        "s1": s1,
+        "o1": o1,
     }
     if category:
         params["auccat"] = category
@@ -108,15 +132,15 @@ def _extract_item_urls_from_html(html: str) -> list[str]:
     """Extract unique Yahoo Auctions item URLs from raw HTML.
 
     Uses BeautifulSoup to find all <a href="..."> elements and filters
-    for Yahoo Auctions item URL pattern.
+    for the Yahoo Auctions item URL pattern (/auction/{id} path only).
+    Non-item URLs (search pages, category pages, seller pages, etc.) are excluded.
     """
     soup = BeautifulSoup(html, "html.parser")
-    _ITEM_URL_PATTERN = "auctions.yahoo.co.jp"
     seen: set[str] = set()
     result: list[str] = []
     for tag in soup.find_all("a", href=True):
         href: str = tag["href"]
-        if _ITEM_URL_PATTERN in href:
+        if _ITEM_URL_RE.search(href):
             base = href.split("?")[0]
             if base not in seen:
                 seen.add(base)
@@ -256,30 +280,28 @@ class YahooAuctionsConnector(BaseConnector):
         query: str,
         max_price: int = 30_000,
         page: int = 1,
+        sort: str = "new",
     ) -> list[str]:
         """Fetch search results page and return individual item URLs.
 
         Extracts anchor hrefs matching the Yahoo Auctions item URL pattern.
         Returns empty list on failure (non-blocking).
         """
-        from app.fetchers.rendered_fetcher import fetch_rendered  # lazy
+        from app.fetchers.rendered_fetcher import fetch_page_html  # lazy
 
-        search_url = build_search_url(query, max_price=max_price, page=page)
+        search_url = build_search_url(query, max_price=max_price, page=page, sort=sort)
         logger.info("Searching: %s", search_url)
 
         try:
-            raw = await fetch_rendered(
+            html = await fetch_page_html(
                 url=search_url,
                 headless=self.headless,
                 wait_ms=self.wait_ms,
-                selectors={},  # only need all_text for link extraction
             )
         except Exception as exc:
             logger.warning("Search fetch failed: %s", exc)
             return []
 
-        # Extract item URLs from all_text via regex
-        all_text = raw.get("all_text", "")
-        item_urls = _extract_item_urls(all_text)
+        item_urls = _extract_item_urls_from_html(html)
         logger.info("Found %d item URLs", len(item_urls))
         return item_urls

@@ -59,7 +59,8 @@ def _pat(*labels: str) -> re.Pattern[str]:
 # ---------------------------------------------------------------------------
 
 PAT_SHOULDER = _pat("肩幅", "肩 幅", "ショルダー")
-PAT_CHEST = _pat("身幅", "バスト", "胸囲", "胸幅")
+PAT_CHEST_WIDTH = _pat("身幅", "胸幅")        # flat width (平置き幅)
+PAT_CHEST_CIRC  = _pat("バスト", "胸囲")     # circumference – must be halved to get 身幅
 PAT_LENGTH = _pat("着丈", "ジャケット丈", "身丈")
 PAT_SLEEVE = _pat("袖丈", "袖 丈", "スリーブ")
 
@@ -84,6 +85,102 @@ PAT_TOTAL_LEN = _pat("総丈", "全丈", "パンツ丈")
 # Hem finish – categorical
 PAT_HEM_DOUBLE = re.compile(r"裾\s*(?:ダブル|W|double)", re.IGNORECASE)
 PAT_HEM_SINGLE = re.compile(r"裾\s*(?:シングル|S|single)", re.IGNORECASE)
+
+# ---------------------------------------------------------------------------
+# Multi-size table handling
+# ---------------------------------------------------------------------------
+
+# Canonical size aliases: lowercase key → canonical label
+_SIZE_ALIASES: dict[str, str] = {
+    "5xl": "5XL", "5xo": "5XL", "5l": "5XL",
+    "4xl": "4XL", "4xo": "4XL", "4l": "4XL",
+    "3xl": "3XL", "3xo": "3XL", "3l": "3XL",
+    "xxl": "2XL", "2xl": "2XL", "2xo": "2XL", "2l": "2XL", "ll": "2XL",
+    "xl":  "XL",
+    "l":   "L",
+    "m":   "M",
+    "s":   "S",
+    "xs":  "XS",
+}
+
+# Check in longest-first order to avoid "L" matching inside "XL" etc.
+_DETECT_ORDER = ["5XL", "4XL", "3XL", "2XL", "XXL", "LL", "XL", "XS", "S", "M", "L"]
+
+
+def _canon_size(label: str) -> Optional[str]:
+    """Normalize a raw size token to its canonical label."""
+    return _SIZE_ALIASES.get(label.lower().replace(" ", "").replace("\u3000", ""))
+
+
+def _detect_target_size(text: str) -> Optional[str]:
+    """Return the primary size label found in *text* (title or similar).
+
+    Tries each canonical size in longest-first order so that '3XL' is found
+    before 'L' and 'XL' is found before 'L'.
+    """
+    upper = text.upper()
+    for size in _DETECT_ORDER:
+        # Must not be part of a longer alphanumeric run
+        pat = re.compile(
+            rf"(?<![A-Z0-9]){re.escape(size)}(?![A-Z0-9])",
+            re.IGNORECASE,
+        )
+        if pat.search(upper):
+            return size
+    return None
+
+
+# Matches rows like: 【 Mサイズ 】   or  【3XLサイズ】  or  [XL]
+# Group 1 = raw size token, Group 2 = rest of line until next bracket / newline
+_SIZE_TABLE_ROW_RE = re.compile(
+    r"[【\[][\s\u3000]*([\dA-Za-z]+)[\s\u3000]*(?:サイズ|SIZE)?[\s\u3000]*[】\]]([^\n【\[]+)",
+)
+
+
+def _extract_size_table(text: str) -> dict[str, str]:
+    """Return {canonical_size: row_text} for every row found in a size table."""
+    rows: dict[str, str] = {}
+    for m in _SIZE_TABLE_ROW_RE.finditer(text):
+        raw = m.group(1).strip()
+        canon = _canon_size(raw)
+        if canon:
+            rows[canon] = m.group(2).strip()
+    return rows
+
+
+def _filter_blocks_to_size(
+    blocks: list[EvidenceBlock],
+    target_size: str,
+) -> Optional[list[EvidenceBlock]]:
+    """Return a version of *blocks* where multi-size table blocks are reduced
+    to only the row matching *target_size*.
+
+    Returns **None** when no size table is found (caller uses originals).
+    Each non-table block is kept as-is.
+    """
+    filtered: list[EvidenceBlock] = []
+    table_found = False
+
+    for block in blocks:
+        text = normalize_japanese_text(block.text)
+        rows = _extract_size_table(text)
+        if len(rows) >= 2:          # ≥2 rows → it's a size table
+            table_found = True
+            if target_size in rows:
+                filtered.append(
+                    EvidenceBlock(
+                        source=block.source,
+                        text=rows[target_size],
+                        confidence=block.confidence,
+                        metadata={"size_row_selected": target_size},
+                    )
+                )
+            # Rows for other sizes are dropped intentionally
+        else:
+            filtered.append(block)  # not a table – keep verbatim
+
+    return filtered if table_found else None
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -171,11 +268,45 @@ def _detect_hem_finish(
 # ---------------------------------------------------------------------------
 
 def parse_size(parser_input: ParserInput) -> SizeParserOutput:
-    """Parse size measurements from evidence blocks."""
+    """Parse size measurements from evidence blocks.
+
+    When the description contains a multi-size table (several size rows like
+    【 Mサイズ 】…  【3XLサイズ】…), the function identifies which size the
+    listing is sold as (from the title first, then the description) and uses
+    only that row for measurement extraction.  This prevents the first row
+    (e.g. M) from being used when the item is actually 3XL.
+    """
     warnings: list[str] = []
     unknown_fields: list[str] = []
 
-    ordered = _ordered_blocks(parser_input.evidence_blocks)
+    # ── Step 1: Detect which size this listing is for ─────────────────────
+    target_size: Optional[str] = None
+
+    # Title is the most reliable source for the sold size
+    for block in parser_input.evidence_blocks:
+        if block.source == "title":
+            target_size = _detect_target_size(normalize_japanese_text(block.text))
+            break
+
+    # Fallback: scan description / all_text for an explicit size mention
+    if target_size is None:
+        for block in parser_input.evidence_blocks:
+            if block.source in ("description", "all_text"):
+                target_size = _detect_target_size(normalize_japanese_text(block.text))
+                if target_size:
+                    break
+
+    # ── Step 2: Narrow multi-size table to the target row ─────────────────
+    evidence_blocks = parser_input.evidence_blocks
+    if target_size:
+        filtered = _filter_blocks_to_size(evidence_blocks, target_size)
+        if filtered is not None:
+            evidence_blocks = filtered
+            warnings.append(
+                f"サイズ表を検出: '{target_size}' 行のみを使用して判定しました"
+            )
+
+    ordered = _ordered_blocks(evidence_blocks)
 
     # --- Jacket ---
     jacket = JacketMeasurements()
@@ -185,7 +316,14 @@ def parse_size(parser_input: ParserInput) -> SizeParserOutput:
     if jacket.shoulder_cm is None:
         unknown_fields.append("jacket_shoulder_cm")
 
-    r = _search_blocks(PAT_CHEST, ordered)
+    r = _search_blocks(PAT_CHEST_WIDTH, ordered)
+    if r is None:
+        # Try circumference keyword: divide by 2 to get flat chest width
+        r_circ = _search_blocks(PAT_CHEST_CIRC, ordered)
+        if r_circ is not None:
+            val, ev_text, source, conf = r_circ
+            r = (round(val / 2, 1), f"{ev_text} (胸囲→身幅 ÷2)", source, conf)
+            warnings.append(f"胸囲 {val}cm → 身幅 {val/2:.1f}cm に換算して判定")
     jacket.chest_width_cm = _make_measurement("jacket_chest_width_cm", r, warnings)
     if jacket.chest_width_cm is None:
         unknown_fields.append("jacket_chest_width_cm")

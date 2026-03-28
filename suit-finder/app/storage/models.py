@@ -57,6 +57,11 @@ class ListingRecord(Base):
     score: Mapped[float] = mapped_column(Float, nullable=True)
     decision_json: Mapped[dict] = mapped_column(JSON, nullable=True)
 
+    # Re-crawl flag
+    # True  → verdict was caused by missing data → re-crawl on next batch run
+    # False → real NG or MATCH (MATCH gets status-only recheck instead)
+    needs_recheck: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Meta
     retrieved_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False

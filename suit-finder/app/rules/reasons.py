@@ -55,3 +55,19 @@ SILVER_BUTTON_NG = "NG: 銀ボタン"
 # Condition
 SEVERE_STAIN_NG = "NG: ひどい汚れあり"
 HOLE_NG = "NG: 穴・破れあり"
+
+
+def classify_needs_recheck(verdict: str, blocking_reasons: list[str]) -> bool:
+    """Return True if this item should be re-crawled on the next batch run.
+
+    - REVIEW always → recheck (data was ambiguous)
+    - NO_MATCH with only NO_PRICE → recheck (price wasn't available yet)
+    - NO_MATCH with any real NG reason → skip (bad item, don't waste time)
+    - MATCH → False (gets status-only recheck instead)
+    """
+    if verdict == "REVIEW":
+        return True
+    if verdict == "NO_MATCH":
+        real_ng = [r for r in blocking_reasons if r != NO_PRICE]
+        return len(real_ng) == 0
+    return False

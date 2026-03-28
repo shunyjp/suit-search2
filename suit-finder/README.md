@@ -16,8 +16,9 @@ suit-finder/
   app/
     api/              FastAPI エンドポイント（/health のみ実装）
     connectors/       サイト別コネクタ
-                        yahoo_auctions.py   Yahoo!オークション（実装済み）
-                        paypay_flea_market.py  PayPayフリマ（実装済み）
+                        yahoo_auctions.py      Yahoo!オークション（実装済み・実機確認済み）
+                        paypay_flea_market.py  PayPayフリマ（実装済み・実機確認済み）
+                        yahoo_shopping.py      Yahoo!ショッピング（実装済み・実機確認済み）
     fetchers/         Playwright ブラウザ管理・ページ取得
     evidence/         EvidenceBlock 抽出・クリーニング・マージ
     parsers/          全パーサー実装済み
@@ -34,13 +35,14 @@ suit-finder/
                         merger.py          LLM結果を既存出力にマージ（上書き禁止）
                         prompts.py         プロンプトビルダー
     rules/            判定エンジン・スコアリング
-    storage/          SQLAlchemy モデル・リポジトリ（実装済み・DB未テスト）
+    storage/          SQLAlchemy モデル・リポジトリ（SQLite、実機確認済み）
     workflows/        crawl / recheck / report ジョブ
     config/           YAML 設定ファイル
   tests/              279件 全パス（ビジネスロジック層 96–100% カバレッジ）
   scripts/
     fetch_sample.py   1件取得確認スクリプト
     run_pipeline.py   フルパイプライン実行スクリプト
+    test_search.py    search() 実機テストスクリプト
 ```
 
 ## 環境セットアップ
@@ -55,12 +57,16 @@ pip install -r requirements.txt
 # 3. Playwright ブラウザインストール
 python -m playwright install chromium
 
-# 4. 環境変数設定（オプション）
-# GEMINI_API_KEY を設定すると LLM 補完が有効になる
-# 未設定でも通常判定は動作する
-export GEMINI_API_KEY="your-key-here"  # Mac/Linux
-$env:GEMINI_API_KEY = "your-key-here"  # Windows PowerShell
+# 4. 環境変数設定
+# GEMINI_API_KEY: LLM補完が有効になる（未設定でも通常判定は動作）
+# YAHOO_AUCTION_APP_ID: search() が有効になる（未設定でも手動URL入力は動作）
+export GEMINI_API_KEY="your-gemini-key"         # Mac/Linux
+export YAHOO_AUCTION_APP_ID="your-yahoo-appid"  # Mac/Linux
+$env:GEMINI_API_KEY = "your-gemini-key"         # Windows PowerShell
+$env:YAHOO_AUCTION_APP_ID = "your-yahoo-appid"  # Windows PowerShell
 ```
+
+Yahoo Japan API キーの取得: https://e.developer.yahoo.co.jp/register
 
 ## テスト実行
 
@@ -88,9 +94,13 @@ pytest tests/test_decision_engine.py -v
 python scripts/fetch_sample.py https://auctions.yahoo.co.jp/jp/auction/XXXXXXXXX
 python scripts/fetch_sample.py https://paypayfleamarket.yahoo.co.jp/item/XXXXXXXXX
 
-# フルパイプライン実行
+# フルパイプライン実行（URLを直接指定）
 python scripts/run_pipeline.py https://auctions.yahoo.co.jp/jp/auction/XXXXXXXXX
 python scripts/run_pipeline.py https://paypayfleamarket.yahoo.co.jp/item/XXXXXXXXX
+python scripts/run_pipeline.py https://store.shopping.yahoo.co.jp/zozo/XXXXXXXX.html
+
+# search() テスト（YAHOO_AUCTION_APP_ID 必要）
+python scripts/test_search.py
 ```
 
 ## LLM 補完の動作フロー
@@ -106,6 +116,30 @@ python scripts/run_pipeline.py https://paypayfleamarket.yahoo.co.jp/item/XXXXXXX
 ```
 
 `GEMINI_API_KEY` 未設定の場合、LLM ステップはスキップされ通常判定のみ実行（例外なし）。
+
+## search() の動作方式
+
+Yahoo Auctions 検索ページは headless ブラウザを bot 検出してサーバー側で結果を空にするため、
+スクレイピングは不可能。また Yahoo Auctions Web Service API（`auctions.yahooapis.jp`）は
+新規登録アプリでは 403 を返す（廃止済みと推定）。
+
+そのため `search()` は **Yahoo Shopping API V3 (`condition=used`)** を使用する：
+
+| 方式 | 状態 | 備考 |
+|------|------|------|
+| Yahoo Auctions スクレイピング | ❌ bot検出でブロック | `pageData.items=[]` が返る |
+| Yahoo Auctions Web Service API | ❌ 403 Forbidden | 新規登録では利用不可 |
+| Yahoo Shopping API V3 (used) | ✅ **動作確認済み** | ZOZO Used 等の中古品 |
+
+返却される URL は `store.shopping.yahoo.co.jp` 形式で、`YahooShoppingConnector` が処理する。
+
+## コネクタ一覧
+
+| コネクタ | 対象URL | 取得方式 |
+|----------|---------|---------|
+| `YahooAuctionsConnector` | `auctions.yahoo.co.jp/jp/auction/*` | Playwright + `__NEXT_DATA__` |
+| `PayPayFleaMarketConnector` | `paypayfleamarket.yahoo.co.jp/item/*` | Playwright + `__NEXT_DATA__` |
+| `YahooShoppingConnector` | `store.shopping.yahoo.co.jp/*/*` | httpx + `__NEXT_DATA__` (SSR・ブラウザ不要) |
 
 ## API サーバー起動
 
@@ -164,20 +198,25 @@ uvicorn app.api.main:app --reload
 |------|------|
 | Yahoo!オークション コネクタ | ✅ 実装済み・実機確認済み（`__NEXT_DATA__` 方式） |
 | PayPay フリマ コネクタ | ✅ 実装済み・実機確認済み |
+| Yahoo!ショッピング コネクタ | ✅ 実装済み・実機確認済み（httpx・ブラウザ不要） |
 | price / status / size パーサー | ✅ 実装済み |
 | material / style / condition パーサー | ✅ 実装済み |
-| Gemini LLM 補完（テキスト） | ✅ 実装済み（`google-genai` SDK） |
-| Gemini LLM 補完（画像・採寸表） | ✅ 実装済み（マルチモーダル） |
-| 検索結果 URL 収集（`search()`） | ✅ 実装済み・実機未テスト |
-| PostgreSQL 保存 | ✅ 実装済み・DB未テスト |
-| Alembic マイグレーション | ❌ 未作成 |
-| recheck_job | ⚠️ スタブ（DB接続部分のみ未実装） |
+| Gemini LLM 補完（テキスト） | ✅ 実装済み・実機確認済み（`google-genai` SDK, `gemini-2.5-flash`） |
+| Gemini LLM 補完（画像・採寸表） | ✅ 実装済み・実機確認済み（マルチモーダル） |
+| search()（Yahoo Shopping API） | ✅ 実装済み・実機確認済み（50件/回） |
+| SQLite 保存 | ✅ 実装済み・実機確認済み（`suitfinder.db` 自動作成） |
+| Alembic マイグレーション | ❌ 未作成（`create_tables()` で代替） |
+| recheck_job | ⚠️ スタブ |
 | report_job | ⚠️ スタブ |
 | n8n 定期実行連携 | ❌ 未着手 |
 
+## 既知の制限事項
+
+- **Yahoo Auctions `search()` はオークション出品を返さない**: Yahoo Auctions の API・スクレイピングは両方ブロックされており、代替として Yahoo Shopping の中古品（主に ZOZO Used）を返す。個人出品のオークション商品は手動でURLを入力して処理する。
+- **listing_type の判定**: Yahoo Shopping 経由のアイテムは `listing_type` が特定されないため、verdict が `NO_MATCH` になりやすい（採寸データ自体は正常取得）。
+
 ## 次の実装優先順位
 
-1. **検索結果 URL 収集の実機テスト**: `YahooAuctionsConnector.search()` を実際の検索ページで確認
-2. **PostgreSQL + Alembic**: Docker 等で DB を立ち上げ → `crawl_job` の保存部分を通しテスト
-3. **n8n 定期実行連携**: HTTP trigger で crawl_job を定期実行
-4. **recheck_job / report_job**: DB 接続後に実装
+1. **listing_type 判定の改善**: Yahoo Shopping アイテムを固定価格として認識させる
+2. **n8n 定期実行連携**: HTTP trigger で crawl_job を定期実行
+3. **recheck_job / report_job**: DB 接続後に実装

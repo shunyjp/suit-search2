@@ -44,7 +44,8 @@ _OUTER_MARKER = re.compile(r"表地|表生地|アウター|外生地", re.IGNORE
 _LINING_MARKER = re.compile(r"裏地|裏生地|ライニング", re.IGNORECASE)
 
 # "素材:" or "材質:" prefix for the material section
-_MATERIAL_SECTION = re.compile(r"(?:素材|材質|生地)[：:\s]", re.IGNORECASE)
+# Allow spaces inside the keyword, e.g. "素 材 ："
+_MATERIAL_SECTION = re.compile(r"(?:素\s*材|材\s*質|生\s*地)[：:\s]", re.IGNORECASE)
 
 # Slash-separated format: "ウール/ポリエステル 60/40" or "W/P=60/40"
 _SLASH_PCT = re.compile(r"(\d{1,3})/(\d{1,3})")
@@ -75,6 +76,24 @@ def _resolve_percentages(fibers: list[dict[str, object]]) -> list[dict[str, obje
     if len(fibers) == 1 and fibers[0]["percentage"] is None:
         fibers[0]["percentage"] = 100
     return fibers
+
+
+def _deduplicate(fibers: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Remove duplicate fiber entries, preferring those with explicit percentages.
+
+    When 'ウール混のスーツ … ウール60%' is parsed, the wool fiber appears twice:
+    once with percentage=None (from '混') and once with percentage=60.
+    We keep the most informative entry for each fiber name.
+    """
+    best: dict[str, dict] = {}
+    for f in fibers:
+        name = str(f["fiber"])
+        existing = best.get(name)
+        if existing is None:
+            best[name] = f
+        elif existing["percentage"] is None and f["percentage"] is not None:
+            best[name] = f   # explicit beats inferred
+    return list(best.values())
 
 
 def _split_outer_lining(text: str) -> tuple[str, str]:
@@ -123,6 +142,9 @@ def parse_material(parser_input: ParserInput) -> MaterialParserOutput:
     lining_fibers: list[dict] = []
     confidence = 0.0
 
+    # Fallback accumulator: fibers found without explicit percentages or markers
+    _fallback_outer: list[dict] = []
+
     for block in ordered:
         text = normalize_japanese_text(block.text)
 
@@ -133,21 +155,47 @@ def parse_material(parser_input: ParserInput) -> MaterialParserOutput:
 
         outer_text, lining_text = _split_outer_lining(text)
 
-        if outer_text.strip():
-            fibers = _resolve_percentages(_extract_fiber_pct(outer_text))
-            if fibers and not outer_fibers:
-                outer_fibers = fibers
-                confidence = max(confidence, block.confidence * 0.9)
+        # Check whether this block has explicit material authority:
+        #   • explicit outer/lining section markers (表地/裏地/素材:)
+        #   • at least one fiber with an explicit percentage (not inferred)
+        has_explicit_marker = bool(
+            _OUTER_MARKER.search(text)
+            or _LINING_MARKER.search(text)
+            or _MATERIAL_SECTION.search(text)
+        )
 
-        if lining_text.strip():
-            fibers = _resolve_percentages(_extract_fiber_pct(lining_text))
+        raw_outer  = _deduplicate(_extract_fiber_pct(outer_text))  if outer_text.strip()  else []
+        raw_lining = _deduplicate(_extract_fiber_pct(lining_text)) if lining_text.strip() else []
+        has_explicit_pct = any(
+            f.get("percentage") is not None
+            for f in (raw_outer + raw_lining)
+        )
+        is_authoritative = has_explicit_marker or has_explicit_pct
+
+        if raw_outer:
+            fibers = _resolve_percentages(raw_outer)
+            if not outer_fibers:
+                if is_authoritative:
+                    outer_fibers = fibers
+                    confidence = max(confidence, block.confidence * 0.9)
+                elif not _fallback_outer:
+                    # Save as low-confidence fallback (e.g. "ウール混" with no %)
+                    _fallback_outer = fibers
+
+        if raw_lining:
+            fibers = _resolve_percentages(raw_lining)
             if fibers and not lining_fibers:
                 lining_fibers = fibers
                 confidence = max(confidence, block.confidence * 0.7)
 
-        # If we found outer fibers, we're done with this block
+        # Stop only when we have authoritative outer fibers
         if outer_fibers:
             break
+
+    # If no authoritative block found, use the fallback (better than nothing)
+    if not outer_fibers and _fallback_outer:
+        outer_fibers = _fallback_outer
+        confidence = max(confidence, 0.3)
 
     if not outer_fibers:
         unknown_fields.append("outer_fibers")

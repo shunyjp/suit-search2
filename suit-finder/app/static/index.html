@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>スーツ候補一覧 | Suit Finder</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", sans-serif;
+      background: #f4f5f7;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.05em; flex: 1; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .badge {
+      background: rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+    .badge span { font-weight: 700; }
+
+    /* ── Toolbar ── */
+    .toolbar {
+      background: #fff;
+      border-bottom: 1px solid #e0e0e8;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 8px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .btn-primary { background: #4f46e5; color: #fff; }
+    .btn-secondary { background: #e0e0e8; color: #1a1a2e; }
+
+    .filter-tabs { display: flex; gap: 4px; }
+    .tab {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      font-size: 0.85rem;
+      cursor: pointer;
+      color: #555;
+      font-weight: 500;
+    }
+    .tab.active { background: #4f46e5; color: #fff; font-weight: 600; }
+
+    .spacer { flex: 1; }
+    .search-box {
+      padding: 6px 12px;
+      border: 1px solid #d0d0e0;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      width: 200px;
+    }
+
+    /* ── Job panel (progress → result) ── */
+    .job-panel {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      background: #eff6ff;
+      border-bottom: 1px solid #bfdbfe;
+      padding: 12px 24px;
+    }
+    .job-panel.visible { display: flex; }
+    .job-panel.done  { background: #f0fdf4; border-color: #bbf7d0; }
+    .job-panel.error { background: #fef2f2; border-color: #fecaca; }
+
+    .job-panel-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .progress-text { font-size: 0.9rem; color: #1e40af; flex: 1; }
+    .job-panel.done  .progress-text { color: #166534; }
+    .job-panel.error .progress-text { color: #991b1b; }
+
+    .progress-bar-wrap {
+      flex: 1;
+      max-width: 240px;
+      background: #dbeafe;
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .job-panel.done .progress-bar-wrap { background: #dcfce7; }
+    .progress-bar { height: 100%; background: #3b82f6; border-radius: 99px; transition: width 0.4s; width: 0%; }
+    .job-panel.done .progress-bar { background: #22c55e; }
+
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid #bfdbfe;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    .job-panel.done .spinner, .job-panel.error .spinner { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .job-result-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip {
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+    .chip-ok     { background: #dcfce7; color: #166534; }
+    .chip-ng     { background: #fee2e2; color: #991b1b; }
+    .chip-skip   { background: #f3f4f6; color: #4b5563; }
+    .chip-recheck{ background: #fef9c3; color: #854d0e; }
+    .chip-err    { background: #fce7f3; color: #9d174d; }
+
+    .concurrency-wrap {
+      font-size: 0.82rem;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      white-space: nowrap;
+    }
+    #concurrency-val {
+      min-width: 14px;
+      font-weight: 700;
+      color: #4f46e5;
+    }
+
+    .btn-close-panel {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; color: #6b7280; padding: 2px 6px;
+      border-radius: 4px; line-height: 1;
+    }
+    .btn-close-panel:hover { background: rgba(0,0,0,0.06); }
+
+    /* ── Job log ── */
+    .job-log {
+      font-size: 0.78rem;
+      color: #374151;
+      font-family: monospace;
+      max-height: 80px;
+      overflow-y: auto;
+      background: rgba(255,255,255,0.6);
+      border-radius: 6px;
+      padding: 4px 8px;
+      line-height: 1.7;
+    }
+
+    /* ── Results header ── */
+    .results-header {
+      padding: 12px 24px 0;
+      font-size: 0.85rem;
+      color: #666;
+    }
+
+    /* ── Grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      padding: 16px 24px 32px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: box-shadow 0.2s;
+    }
+    .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+
+    .card-img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      background: #f0f0f6;
+    }
+    .card-img-placeholder {
+      width: 100%;
+      height: 180px;
+      background: #f0f0f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #bbb;
+      font-size: 2rem;
+    }
+
+    .card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+
+    .card-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      color: #1a1a2e;
+    }
+
+    .card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .price { font-size: 1.05rem; font-weight: 700; color: #c0392b; }
+    .price-tag {
+      font-size: 0.72rem; font-weight: 600;
+      background: #dcfce7; color: #166534;
+      border-radius: 4px; padding: 2px 6px;
+    }
+    .price-tag-warn {
+      background: #fef3c7; color: #92400e;
+    }
+    .score {
+      font-size: 0.78rem;
+      background: #f0f0ff;
+      color: #4f46e5;
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-weight: 600;
+    }
+
+    .status-tag {
+      font-size: 0.75rem;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+    .status-active { background: #dcfce7; color: #166534; }
+    .status-ended  { background: #fee2e2; color: #991b1b; }
+    .status-unknown{ background: #f3f4f6; color: #6b7280; }
+
+    .verdict-review { border-top: 3px solid #f59e0b; }
+    .review-badge {
+      font-size: 0.72rem; font-weight: 700;
+      background: #fef3c7; color: #92400e;
+      border-radius: 4px; padding: 2px 7px;
+    }
+
+    .card-specs {
+      font-size: 0.78rem;
+      color: #555;
+      line-height: 1.6;
+    }
+    .card-blocking {
+      font-size: 0.72rem;
+      color: #b45309;
+      background: #fffbeb;
+      border-left: 2px solid #f59e0b;
+      padding: 2px 6px;
+      border-radius: 0 4px 4px 0;
+      line-height: 1.5;
+    }
+
+    .card-footer {
+      margin-top: auto;
+      padding-top: 8px;
+    }
+    .card-link {
+      display: block;
+      text-align: center;
+      padding: 8px;
+      background: #f5f5ff;
+      border-radius: 8px;
+      color: #4f46e5;
+      font-size: 0.83rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s;
+    }
+    .card-link:hover { background: #e0e0ff; }
+
+    .card-actions { display: flex; gap: 6px; margin-top: 6px; }
+    .btn-ng {
+      flex: 1;
+      padding: 7px;
+      border-radius: 8px;
+      border: 1px solid #fca5a5;
+      background: #fff;
+      color: #dc2626;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-ng:hover { background: #fee2e2; }
+    .btn-ng:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* NG 確定アニメーション */
+    @keyframes fadeOut {
+      from { opacity: 1; transform: scale(1); }
+      to   { opacity: 0; transform: scale(0.92); }
+    }
+    .card.removing { animation: fadeOut 0.25s ease forwards; pointer-events: none; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 64px 24px;
+      color: #888;
+      text-align: center;
+    }
+    .empty-state.visible { display: flex; }
+    .empty-icon { font-size: 3rem; }
+
+    /* ── Toast (エラー専用・短め) ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1a1a2e;
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+      transform: translateY(80px);
+      opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+      max-width: 360px;
+      z-index: 999;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.error { border-left: 4px solid #ef4444; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>👔 スーツ候補一覧</h1>
+  <div class="stats">
+    <div class="badge">候補: <span id="stat-match">-</span>件</div>
+    <div class="badge" style="background:rgba(245,158,11,0.25)">要確認: <span id="stat-review">-</span>件</div>
+    <div class="badge">NG: <span id="stat-ng">-</span>件</div>
+  </div>
+</header>
+
+<div class="toolbar">
+  <div class="filter-tabs">
+    <button class="tab active" data-verdict="CANDIDATES">✅ 候補一覧</button>
+    <button class="tab" data-verdict="MATCH">OK のみ</button>
+    <button class="tab" data-verdict="RECENT_NG">🔍 直近NG20件</button>
+    <button class="tab" data-verdict="NO_MATCH">❌ NG 全件</button>
+  </div>
+  <label style="font-size:0.85rem;color:#555;display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="active-only"> 出品中のみ
+  </label>
+  <div class="spacer"></div>
+  <input class="search-box" type="text" id="search-input" placeholder="タイトルで絞り込み…">
+  <label class="concurrency-wrap" title="同時クロール数（多いほど速いがPC負荷が上がります）">
+    ⚡ 並列
+    <input type="range" id="concurrency-slider" min="1" max="5" value="2" step="1"
+           style="width:80px;vertical-align:middle;">
+    <span id="concurrency-val">2</span>
+  </label>
+  <label class="concurrency-wrap" title="この時間（日数×24h）より古い NG 判定を再クロールします（0=永続スキップ）">
+    🔄 NG再判定
+    <input type="range" id="recrawl-slider" min="0" max="14" value="1" step="1"
+           style="width:80px;vertical-align:middle;">
+    <span id="recrawl-val">1</span>日
+  </label>
+  <label class="concurrency-wrap" title="検索対象のサイトを選択">
+    🌐 サイト
+    <select id="source-select" style="font-size:0.82rem;padding:3px 6px;border-radius:6px;border:1px solid #ccc;vertical-align:middle;">
+      <option value="yahoo_auctions">ヤフオク</option>
+      <option value="mercari">メルカリ</option>
+      <option value="yahoo_shopping">Yショッピング</option>
+    </select>
+  </label>
+  <button class="btn btn-secondary" id="refresh-btn">🔄 更新</button>
+  <button class="btn btn-primary" id="judge-btn">＋ 新着50件を追加判定</button>
+</div>
+
+<div class="job-panel" id="job-panel">
+  <div class="job-panel-row">
+    <div class="spinner"></div>
+    <div class="progress-text" id="progress-text">検索中…</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <button class="btn-close-panel" id="close-panel-btn" title="閉じる" style="display:none">✕</button>
+  </div>
+  <div class="job-result-chips" id="result-chips" style="display:none"></div>
+  <div class="job-log" id="job-log" style="display:none"></div>
+</div>
+
+<div class="results-header" id="results-header"></div>
+
+<div class="grid" id="grid"></div>
+<div class="empty-state" id="empty-state">
+  <div class="empty-icon">📦</div>
+  <div>該当する商品がありません</div>
+  <div style="font-size:0.82rem">「新着50件を追加判定」ボタンで検索・判定を開始できます</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const BASE = '';
+
+  // ── State ─────────────────────────────────────────────────
+  let allItems = [];          // MATCH + REVIEW (candidates)
+  let recentNgItems = [];     // 直近 NG 20 件（別フェッチ）
+  let currentVerdict = 'CANDIDATES'; // CANDIDATES | MATCH | RECENT_NG | NO_MATCH
+  let currentSearch = '';
+  let activeOnly = false;
+  let currentJobId = null;
+  let pollTimer = null;
+
+  // ── DOM refs ───────────────────────────────────────────────
+  const grid = document.getElementById('grid');
+  const emptyState = document.getElementById('empty-state');
+  const judgeBtn = document.getElementById('judge-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+  const sourceSelect = document.getElementById('source-select');
+  const jobPanel = document.getElementById('job-panel');
+  const progressText = document.getElementById('progress-text');
+  const progressBar = document.getElementById('progress-bar');
+  const resultChips = document.getElementById('result-chips');
+  const jobLog = document.getElementById('job-log');
+  const closePanelBtn = document.getElementById('close-panel-btn');
+  const searchInput = document.getElementById('search-input');
+  const activeOnlyChk = document.getElementById('active-only');
+  const resultsHeader = document.getElementById('results-header');
+
+  // ── Helpers ────────────────────────────────────────────────
+  function fmt(v) {
+    if (v == null) return '-';
+    return Number(v).toLocaleString('ja-JP');
+  }
+
+  function statusTag(item) {
+    const s = item.normalized_status;
+    const active = item.is_active;
+    if (s === 'ended' || active === false) return '<span class="status-tag status-ended">終了</span>';
+    if (s === 'active' || active === true)  return '<span class="status-tag status-active">出品中</span>';
+    return '<span class="status-tag status-unknown">不明</span>';
+  }
+
+  function specsLine(item) {
+    const parts = [];
+    if (item.jacket_shoulder_cm) parts.push(`肩幅${item.jacket_shoulder_cm}cm`);
+    if (item.jacket_chest_cm)    parts.push(`胸囲${item.jacket_chest_cm}cm`);
+    if (item.pants_waist_cm)     parts.push(`ウエスト${item.pants_waist_cm}cm`);
+    if (item.button_count)       parts.push(`${item.button_count}B`);
+    return parts.join('　');
+  }
+
+  function priceLabel(item) {
+    // Show buy_now price explicitly with label, and warn if absent on auctions
+    const bn = item.buy_now_price_jpy;
+    const lt = item.listing_type;
+    if (bn != null) {
+      return `<span class="price">¥${fmt(bn)}</span><span class="price-tag">即決</span>`;
+    }
+    if (lt === 'auction') {
+      // 即決なし → warn
+      const cur = item.price_jpy;
+      return cur != null
+        ? `<span class="price">¥${fmt(cur)}</span><span class="price-tag price-tag-warn">現在値（即決なし）</span>`
+        : `<span class="price-tag price-tag-warn">即決なし</span>`;
+    }
+    return item.price_jpy != null ? `<span class="price">¥${fmt(item.price_jpy)}</span>` : '';
+  }
+
+  function renderCard(item) {
+    const img = item.thumbnail
+      ? `<img class="card-img" src="${escHtml(item.thumbnail)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        + `<div class="card-img-placeholder" style="display:none">👔</div>`
+      : `<div class="card-img-placeholder">👔</div>`;
+
+    const specs = specsLine(item);
+    const score = item.score != null ? `<span class="score">スコア ${item.score.toFixed(1)}</span>` : '';
+
+    const reviewBadge = item.verdict === 'REVIEW'
+      ? '<span class="review-badge">🔍 要確認</span>' : '';
+    const cardClass = item.verdict === 'REVIEW' ? 'card verdict-review' : 'card';
+    const priceLine = priceLabel(item);
+
+    // Show first blocking reason if any (for debug / transparency)
+    const blockingNote = (item.blocking_reasons || []).length > 0
+      ? `<div class="card-blocking">${escHtml(item.blocking_reasons[0])}</div>` : '';
+
+    return `
+      <div class="${cardClass}">
+        ${img}
+        <div class="card-body">
+          <div class="card-title">${escHtml(item.title || '(タイトルなし)')}</div>
+          <div class="card-meta">
+            ${priceLine}
+            ${score}
+            ${reviewBadge}
+            ${statusTag(item)}
+          </div>
+          ${specs ? `<div class="card-specs">${escHtml(specs)}</div>` : ''}
+          ${blockingNote}
+          <div class="card-footer">
+            <a class="card-link" href="${escHtml(item.url)}" target="_blank" rel="noopener">
+              Yahoo!オークションで確認 →
+            </a>
+            <div class="card-actions">
+              <button class="btn-ng" data-id="${escHtml(item.id)}" onclick="markNg(this)">
+                ❌ NG にする
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Render ─────────────────────────────────────────────────
+  function applyFilters() {
+    let items;
+    if (currentVerdict === 'CANDIDATES') {
+      items = allItems.filter(i => i.verdict === 'MATCH' || i.verdict === 'REVIEW');
+    } else if (currentVerdict === 'MATCH') {
+      items = allItems.filter(i => i.verdict === 'MATCH');
+    } else if (currentVerdict === 'RECENT_NG') {
+      items = recentNgItems;  // already fetched separately
+    } else {
+      // NO_MATCH full – use allItems NO_MATCH portion (may be partial due to limit)
+      items = allItems.filter(i => i.verdict === 'NO_MATCH');
+    }
+
+    if (activeOnly) items = items.filter(i => i.is_active !== false);
+    if (currentSearch) {
+      const q = currentSearch.toLowerCase();
+      items = items.filter(i => (i.title || '').toLowerCase().includes(q));
+    }
+
+    resultsHeader.textContent = `${items.length}件`;
+    grid.innerHTML = items.map(renderCard).join('');
+
+    if (items.length === 0) {
+      emptyState.classList.add('visible');
+    } else {
+      emptyState.classList.remove('visible');
+    }
+  }
+
+  // ── Load stats (counts from full DB, no LIMIT) ─────────────
+  async function loadStats() {
+    try {
+      const res = await fetch(`${BASE}/listings/stats`);
+      if (!res.ok) return;
+      const s = await res.json();
+      document.getElementById('stat-match').textContent  = (s.MATCH || 0) + (s.REVIEW || 0);
+      document.getElementById('stat-review').textContent = s.REVIEW || 0;
+      document.getElementById('stat-ng').textContent     = s.NO_MATCH || 0;
+    } catch (_) { /* stats are best-effort */ }
+  }
+
+  // ── Load listings (candidates only, limit 200) ─────────────
+  async function loadListings() {
+    try {
+      // Candidates: MATCH + REVIEW ordered by score
+      const res = await fetch(`${BASE}/listings?verdict=MATCH&limit=200`);
+      if (!res.ok) throw new Error(res.statusText);
+      const matchItems = await res.json();
+
+      const res2 = await fetch(`${BASE}/listings?verdict=REVIEW&limit=200`);
+      if (!res2.ok) throw new Error(res2.statusText);
+      const reviewItems = await res2.json();
+
+      allItems = [...matchItems, ...reviewItems];
+
+      await loadStats();   // accurate counts from DB
+      applyFilters();
+    } catch (e) {
+      showToast('データの取得に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // ── Load recent NG 20 ──────────────────────────────────────
+  async function loadRecentNg() {
+    try {
+      const res = await fetch(`${BASE}/listings?verdict=NO_MATCH&sort=recent&limit=20`);
+      if (!res.ok) throw new Error(res.statusText);
+      recentNgItems = await res.json();
+      applyFilters();
+    } catch (e) {
+      showToast('直近NGの取得に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // ── Job panel helpers ──────────────────────────────────────
+  function addLog(msg) {
+    const time = new Date().toLocaleTimeString('ja-JP');
+    jobLog.style.display = '';
+    jobLog.insertAdjacentHTML('beforeend', `<div>[${time}] ${escHtml(msg)}</div>`);
+    jobLog.scrollTop = jobLog.scrollHeight;
+  }
+
+  function showPanelDone(job) {
+    const v = job.verdicts || {};
+    jobPanel.className = 'job-panel visible done';
+    progressBar.style.width = '100%';
+    progressText.textContent = '判定完了';
+    closePanelBtn.style.display = '';
+
+    resultChips.style.display = '';
+    resultChips.innerHTML = [
+      v['MATCH']    ? `<span class="chip chip-ok">✅ OK ${v['MATCH']}件</span>` : '',
+      v['REVIEW']   ? `<span class="chip chip-recheck">🔍 要確認 ${v['REVIEW']}件</span>` : '',
+      v['NO_MATCH'] ? `<span class="chip chip-ng">❌ NG ${v['NO_MATCH']}件</span>` : '',
+      job.status_rechecked ? `<span class="chip chip-skip">🔄 ステータス更新 ${job.status_rechecked}件</span>` : '',
+      job.skipped   ? `<span class="chip chip-skip">⏭ スキップ ${job.skipped}件</span>` : '',
+      job.errors    ? `<span class="chip chip-err">⚠ エラー ${job.errors}件</span>` : '',
+    ].join('');
+
+    const recrawlDays = parseInt(document.getElementById('recrawl-slider').value, 10);
+    if (job.newly_judged === 0 && job.skipped > 0) {
+      addLog(`完了 — 処理 ${job.processed}件 / 取得 ${job.total_urls}件`);
+      addLog(`⚠️ 全件スキップ: 検索結果がすべてDB登録済み（${recrawlDays > 0 ? recrawlDays + '日' : '永続'}スキップ期間内）です。`);
+      addLog(`💡 「NG再判定」スライダーを小さくするか、しばらく待ってから再実行してください。`);
+    } else {
+      addLog(`完了 — 処理 ${job.processed}件 / 取得 ${job.total_urls}件`);
+    }
+  }
+
+  function showPanelError(msg) {
+    jobPanel.className = 'job-panel visible error';
+    progressText.textContent = 'エラー: ' + msg;
+    closePanelBtn.style.display = '';
+    addLog('エラー: ' + msg);
+  }
+
+  // ── Sliders ────────────────────────────────────────────────
+  const concurrencySlider = document.getElementById('concurrency-slider');
+  const concurrencyVal    = document.getElementById('concurrency-val');
+  concurrencySlider.addEventListener('input', () => {
+    concurrencyVal.textContent = concurrencySlider.value;
+  });
+
+  const recrawlSlider = document.getElementById('recrawl-slider');
+  const recrawlVal    = document.getElementById('recrawl-val');
+  recrawlSlider.addEventListener('input', () => {
+    recrawlVal.textContent = recrawlSlider.value;
+  });
+
+  // ── Batch job ──────────────────────────────────────────────
+  async function startBatchJob() {
+    judgeBtn.disabled = true;
+    refreshBtn.disabled = true;
+
+    // Reset panel to running state
+    jobPanel.className = 'job-panel visible';
+    progressText.textContent = '検索URLを収集中…';
+    progressBar.style.width = '0%';
+    resultChips.style.display = 'none';
+    resultChips.innerHTML = '';
+    jobLog.style.display = '';
+    jobLog.innerHTML = '';
+    closePanelBtn.style.display = 'none';
+    addLog('ジョブ開始');
+
+    try {
+      const res = await fetch(`${BASE}/batch/enqueue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'メンズ スーツ セットアップ',
+          source: sourceSelect.value,
+          sort: 'new',
+          max_price: 30000,
+          target_new: 50,
+          max_pages: 10,
+          headless: true,
+          concurrency: parseInt(concurrencySlider.value, 10),
+          recrawl_after_days: parseInt(recrawlSlider.value, 10),
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      currentJobId = data.job_id;
+      addLog(`ジョブID: ${data.job_id}`);
+      pollProgress();
+    } catch (e) {
+      showToast('ジョブ開始に失敗しました: ' + e.message, 'error');
+      showPanelError(e.message);
+      judgeBtn.disabled = false;
+      refreshBtn.disabled = false;
+    }
+  }
+
+  function pollProgress() {
+    if (!currentJobId) return;
+    pollTimer = setTimeout(async () => {
+      try {
+        const res = await fetch(`${BASE}/batch/jobs/${currentJobId}`);
+        if (!res.ok) throw new Error(res.statusText);
+        const job = await res.json();
+
+        const pct = job.target > 0
+          ? Math.min(99, Math.round((job.newly_judged / job.target) * 100))
+          : 5;
+        progressBar.style.width = pct + '%';
+        const par = parseInt(concurrencySlider.value, 10);
+        const srcLabel = {'yahoo_auctions':'ヤフオク','mercari':'メルカリ','yahoo_shopping':'Yショッピング'}[sourceSelect.value] || sourceSelect.value;
+        progressText.textContent =
+          `[${srcLabel}] 判定中… 新規 ${job.newly_judged} / ${job.target} 件` +
+          (job.skipped ? `　スキップ: ${job.skipped}件` : '') +
+          `　（並列: ${par}）`;
+
+        if (job.status === 'done') {
+          showPanelDone(job);
+          judgeBtn.disabled = false;
+          refreshBtn.disabled = false;
+          currentJobId = null;
+          await loadListings();
+        } else if (job.status === 'error') {
+          showPanelError(job.error_msg || '不明');
+          judgeBtn.disabled = false;
+          refreshBtn.disabled = false;
+          currentJobId = null;
+        } else {
+          pollProgress();
+        }
+      } catch (e) {
+        showToast('ステータス取得エラー: ' + e.message, 'error');
+        judgeBtn.disabled = false;
+        refreshBtn.disabled = false;
+        currentJobId = null;
+      }
+    }, 3000);
+  }
+
+  // ── Toast (エラーのみ) ─────────────────────────────────────
+  function showToast(msg, type = '') {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.className = 'toast show' + (type ? ' ' + type : '');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('show'), 6000);
+  }
+
+  // ── NG 操作 ────────────────────────────────────────────────
+  async function markNg(btn) {
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    btn.textContent = '処理中…';
+
+    try {
+      const res = await fetch(`${BASE}/listings/${id}/ng`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: '手動NG' }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      // カードをフェードアウトして allItems から除去
+      const card = btn.closest('.card');
+      card.classList.add('removing');
+      card.addEventListener('animationend', () => {
+        allItems = allItems.filter(i => i.id !== id);
+        // 統計更新
+        const matchCount  = allItems.filter(i => i.verdict === 'MATCH').length;
+        const reviewCount = allItems.filter(i => i.verdict === 'REVIEW').length;
+        document.getElementById('stat-match').textContent  = matchCount + reviewCount;
+        document.getElementById('stat-review').textContent = reviewCount;
+        document.getElementById('stat-ng').textContent     = allItems.filter(i => i.verdict === 'NO_MATCH').length;
+        applyFilters();
+      }, { once: true });
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '❌ NG にする';
+      showToast('NG 更新に失敗しました: ' + e.message, 'error');
+    }
+  }
+
+  // ── Event listeners ────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentVerdict = tab.dataset.verdict;
+      if (currentVerdict === 'RECENT_NG') {
+        loadRecentNg();   // fetch fresh from server each time tab is clicked
+      } else {
+        applyFilters();
+      }
+    });
+  });
+
+  searchInput.addEventListener('input', e => {
+    currentSearch = e.target.value.trim();
+    applyFilters();
+  });
+
+  activeOnlyChk.addEventListener('change', e => {
+    activeOnly = e.target.checked;
+    applyFilters();
+  });
+
+  refreshBtn.addEventListener('click', loadListings);
+  judgeBtn.addEventListener('click', startBatchJob);
+  closePanelBtn.addEventListener('click', () => {
+    jobPanel.className = 'job-panel';
+  });
+
+  // ── Init ───────────────────────────────────────────────────
+  loadListings();
+</script>
+</body>
+</html>
