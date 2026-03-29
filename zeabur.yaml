@@ -1,0 +1,11 @@
+apiVersion: zeabur.com/v1
+kind: ZeaburServiceConfig
+name: suit-search2
+
+build:
+  buildCommand: |
+    cd suit-finder
+    pip install -r requirements.txt
+
+start:
+  startCommand: cd suit-finder && uvicorn app.api.main:app --host 0.0.0.0 --port $PORT
